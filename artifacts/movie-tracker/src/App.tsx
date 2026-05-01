@@ -1188,7 +1188,7 @@ export default function App() {
 
   if (view === 'search') {
     const existingTitles = new Set(movies.map(m => (m.title || '').toLowerCase()));
-    return <SearchPage onBack={() => setView('library')} onAdded={() => { fetchMovies(); setView('library'); }} existingTitles={existingTitles} />;
+    return <SearchPage onBack={() => setView('library')} onAdded={fetchMovies} existingTitles={existingTitles} />;
   }
 
   return (
