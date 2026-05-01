@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import {
   Search, Heart, CheckCircle, LogOut, Plus, ArrowUp,
-  Film, ChevronRight, X
+  Film, X, Trash2
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -240,7 +240,7 @@ const ALL_GENRES = [
   'Mystery', 'Romance', 'Sci-Fi', 'Thriller', 'War', 'Western'
 ];
 
-function LibraryPage({ movies, onToggle, onLogout, onOpenSearch }) {
+function LibraryPage({ movies, onToggle, onDelete, onLogout, onOpenSearch }) {
   const [libSearch, setLibSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sectionFilter, setSectionFilter] = useState('all');
@@ -413,56 +413,92 @@ function LibraryPage({ movies, onToggle, onLogout, onOpenSearch }) {
           </div>
         )}
 
-        <div className="space-y-2">
-          {filtered.map((movie, idx) => {
+        <div className="space-y-3">
+          {filtered.map((movie) => {
             const globalIdx = movies.indexOf(movie);
             const rankNum = globalIdx + 1;
             return (
               <div
                 key={movie.id}
-                className="flex items-center bg-[#111116] rounded-2xl border border-white/[0.04] overflow-hidden"
+                className="flex bg-[#111116] rounded-2xl border border-white/[0.05] overflow-hidden"
               >
-                {/* Rank number */}
-                <div className="w-10 text-center flex-shrink-0 py-4">
-                  <span className="text-xs text-gray-600 font-mono">{rankNum}</span>
+                {/* Poster */}
+                <div className="w-16 flex-shrink-0 relative">
+                  {movie.poster ? (
+                    <img
+                      src={movie.poster}
+                      alt={movie.title}
+                      className="w-full h-full object-cover"
+                      style={{ minHeight: '96px' }}
+                    />
+                  ) : (
+                    <div className="w-full h-full min-h-[96px] bg-[#1c1c26] flex items-center justify-center">
+                      <Film size={20} className="text-gray-700" />
+                    </div>
+                  )}
+                  {/* Rank badge */}
+                  <div className="absolute top-1 left-1 bg-black/70 rounded-md px-1 py-0.5">
+                    <span className="text-[9px] text-gray-400 font-mono">{rankNum}</span>
+                  </div>
                 </div>
 
-                {/* Watched checkbox */}
-                <button
-                  onClick={() => onToggle(movie.id, 'watched', movie.watched)}
-                  className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mr-3 transition-all ${
-                    movie.watched
-                      ? 'bg-green-500 border-green-500'
-                      : 'border-gray-700 hover:border-gray-500'
-                  }`}
-                >
-                  {movie.watched && <CheckCircle size={12} className="text-black" strokeWidth={3} />}
-                </button>
+                {/* Content */}
+                <div className="flex-1 min-w-0 px-3 py-3 flex flex-col justify-between">
+                  <div>
+                    {/* Title */}
+                    <h3 className={`font-bold text-sm leading-snug ${movie.watched ? 'text-gray-500 line-through' : 'text-white'}`}>
+                      {movie.title}
+                    </h3>
 
-                {/* Info */}
-                <div className="flex-1 min-w-0 py-3.5">
-                  <h3 className={`font-bold text-sm truncate ${movie.watched ? 'text-gray-600 line-through' : 'text-white'}`}>
-                    {movie.title}
-                  </h3>
-                  {movie.year && (
-                    <p className="text-[10px] text-gray-600 mt-0.5">{movie.year}</p>
-                  )}
-                </div>
+                    {/* Year + Type */}
+                    <div className="flex items-center gap-2 mt-1">
+                      {movie.year && (
+                        <span className="text-xs text-yellow-600 font-bold">{movie.year}</span>
+                      )}
+                      {movie.type && (
+                        <span className="text-[9px] text-gray-600 uppercase tracking-wider">{movie.type}</span>
+                      )}
+                    </div>
 
-                {/* Genre badge */}
-                <div className="flex items-center gap-2 px-3 flex-shrink-0">
-                  {movie.genre && (
-                    <span className={`text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider ${genreColor(movie.genre)}`}>
-                      {movie.genre}
-                    </span>
-                  )}
-                  {/* Favorite button */}
-                  <button
-                    onClick={() => onToggle(movie.id, 'favorite', movie.favorite)}
-                    className={`transition-colors ml-1 ${movie.favorite ? 'text-red-500' : 'text-gray-800 hover:text-gray-600'}`}
-                  >
-                    <Heart size={17} fill={movie.favorite ? 'currentColor' : 'none'} />
-                  </button>
+                    {/* Genre badge */}
+                    {movie.genre && (
+                      <span className={`inline-block mt-1.5 text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${genreColor(movie.genre)}`}>
+                        {movie.genre}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Actions row */}
+                  <div className="flex items-center gap-3 mt-2">
+                    {/* Watched toggle */}
+                    <button
+                      onClick={() => onToggle(movie.id, 'watched', movie.watched)}
+                      className={`flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all ${
+                        movie.watched
+                          ? 'bg-green-900/40 text-green-400'
+                          : 'bg-[#1c1c26] text-gray-500 hover:text-gray-300'
+                      }`}
+                    >
+                      <CheckCircle size={12} strokeWidth={2.5} />
+                      {movie.watched ? 'Watched' : 'Unwatched'}
+                    </button>
+
+                    {/* Favorite */}
+                    <button
+                      onClick={() => onToggle(movie.id, 'favorite', movie.favorite)}
+                      className={`transition-colors ${movie.favorite ? 'text-red-500' : 'text-gray-700 hover:text-gray-500'}`}
+                    >
+                      <Heart size={16} fill={movie.favorite ? 'currentColor' : 'none'} />
+                    </button>
+
+                    {/* Delete */}
+                    <button
+                      onClick={() => onDelete(movie.id)}
+                      className="text-gray-700 hover:text-red-500 transition-colors ml-auto"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -521,15 +557,20 @@ export default function App() {
     fetchMovies();
   };
 
+  const deleteMovie = async (id) => {
+    const { error } = await supabase.from('movies').delete().eq('id', id);
+    if (error) alert('Could not remove film: ' + error.message);
+    else fetchMovies();
+  };
+
   if (!user) return <LoginScreen />;
 
   if (view === 'search') {
-    const existingIds = new Set();
     return (
       <SearchPage
         onBack={() => setView('library')}
         onAdded={fetchMovies}
-        existingIds={existingIds}
+        existingIds={new Set(movies.map(m => m.tmdb_id).filter(Boolean))}
       />
     );
   }
@@ -538,6 +579,7 @@ export default function App() {
     <LibraryPage
       movies={movies}
       onToggle={toggleStatus}
+      onDelete={deleteMovie}
       onLogout={() => supabase.auth.signOut()}
       onOpenSearch={() => setView('search')}
     />
