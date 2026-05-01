@@ -1,7 +1,7 @@
 {
   "name": "Movie Sync — Masterpiece Tracker",
   "short_name": "Movie Sync",
-  "description": "Track every film and series you watch. Your personal masterpiece tracker.",
+  "description": "Track every film and series you watch. Created by Mahmudul Hasan Mahid.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0c",

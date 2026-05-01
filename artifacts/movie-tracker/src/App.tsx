@@ -101,6 +101,9 @@ function LoginScreen() {
         <p className="text-[10px] uppercase tracking-[0.4em] text-gray-500 mb-2 font-black">The Ultimate Canon</p>
         <h2 className="text-3xl font-black text-yellow-500 mb-2">Movie Sync</h2>
         <p className="text-xs text-gray-600 mb-8">Your personal masterpiece tracker</p>
+        <p className="text-[10px] text-gray-700 mb-6 -mt-4">
+          Made by <span className="text-yellow-700 font-bold">Mahmudul Hasan Mahid</span>
+        </p>
         <input type="email" placeholder="Email"
           className="w-full bg-[#0a0a0c] p-4 rounded-xl mb-4 border border-gray-800 outline-none focus:border-yellow-500/50 transition-colors text-sm"
           onChange={e => setEmail(e.target.value)} />
@@ -674,6 +677,7 @@ function StatsPage({ movies }) {
       <div className="pt-10 pb-5 px-5 bg-[#0f0f13] border-b border-white/5">
         <p className="text-[9px] uppercase tracking-[0.35em] text-gray-500">The Ultimate Canon</p>
         <h1 className="text-2xl font-black mt-0.5">Your Stats</h1>
+        <p className="text-[9px] text-gray-700 mt-0.5">by <span className="text-yellow-800 font-bold">Mahmudul Hasan Mahid</span></p>
       </div>
 
       <div className="px-4 pt-5 space-y-5">
@@ -977,6 +981,7 @@ function LibraryPage({ movies, onToggle, onDelete, onRate, onLogout, onOpenSeed 
           <div>
             <p className="text-[9px] uppercase tracking-[0.35em] text-gray-500">The Ultimate Canon</p>
             <h1 className="text-2xl font-black mt-0.5">Masterpiece Tracker</h1>
+            <p className="text-[9px] text-gray-700 mt-0.5">by <span className="text-yellow-800 font-bold">Mahmudul Hasan Mahid</span></p>
           </div>
           <div className="flex items-center gap-3 mt-1">
             <button onClick={onOpenSeed}
