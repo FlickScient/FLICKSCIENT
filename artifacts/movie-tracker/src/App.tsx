@@ -240,7 +240,7 @@ const ALL_GENRES = [
   'Mystery', 'Romance', 'Sci-Fi', 'Thriller', 'War', 'Western'
 ];
 
-function LibraryPage({ movies, onToggle, onDelete, onLogout, onOpenSearch }) {
+function LibraryPage({ movies, onToggle, onDelete, onLogout, onOpenSearch, onOpenSeed }) {
   const [libSearch, setLibSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sectionFilter, setSectionFilter] = useState('all');
@@ -409,7 +409,19 @@ function LibraryPage({ movies, onToggle, onDelete, onLogout, onOpenSearch }) {
           <div className="text-center py-16">
             <Film size={36} className="text-gray-800 mx-auto mb-3" />
             <p className="text-gray-600 text-sm">No films found</p>
-            <p className="text-gray-700 text-xs mt-1">Try adjusting filters or add films via the + button</p>
+            {movies.length === 0 ? (
+              <div className="mt-4">
+                <p className="text-gray-700 text-xs mb-4">Start by importing 500 popular films or search manually</p>
+                <button
+                  onClick={onOpenSeed}
+                  className="bg-yellow-500 text-black text-xs font-black px-6 py-3 rounded-2xl hover:bg-yellow-400 transition-colors"
+                >
+                  Import 500 Films
+                </button>
+              </div>
+            ) : (
+              <p className="text-gray-700 text-xs mt-1">Try adjusting your filters</p>
+            )}
           </div>
         )}
 
@@ -508,12 +520,23 @@ function LibraryPage({ movies, onToggle, onDelete, onLogout, onOpenSearch }) {
 
       {/* ── Bottom bar ── */}
       <div className="fixed bottom-6 left-0 right-0 flex justify-between items-end px-6 z-50 pointer-events-none">
+        {/* Left: Add single film */}
         <button
           onClick={onOpenSearch}
           className="pointer-events-auto w-14 h-14 bg-yellow-500 text-black rounded-full flex items-center justify-center shadow-lg shadow-yellow-500/20 hover:bg-yellow-400 transition-all active:scale-95"
         >
           <Plus size={26} strokeWidth={2.5} />
         </button>
+
+        {/* Centre: Import 500 films */}
+        <button
+          onClick={onOpenSeed}
+          className="pointer-events-auto bg-[#1c1c26]/90 backdrop-blur-md border border-white/10 text-yellow-500 text-[10px] font-black px-4 py-2.5 rounded-full shadow-lg hover:bg-[#2c2c3a] transition-all active:scale-95"
+        >
+          Import 500 Films
+        </button>
+
+        {/* Right: Scroll to top */}
         <button
           onClick={scrollTop}
           className="pointer-events-auto w-12 h-12 bg-[#1c1c26]/90 backdrop-blur-md text-gray-400 rounded-full flex items-center justify-center border border-white/10 hover:text-white transition-colors"
@@ -525,11 +548,161 @@ function LibraryPage({ movies, onToggle, onDelete, onLogout, onOpenSearch }) {
   );
 }
 
+// ─── Seed Modal ──────────────────────────────────────────────────────────────
+function SeedModal({ onClose, onDone, userId }) {
+  const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState('');
+  const [running, setRunning] = useState(false);
+  const [done, setDone] = useState(false);
+  const [count, setCount] = useState(0);
+
+  const run = async () => {
+    setRunning(true);
+    const items = [];
+
+    // ── Fetch top movies: 20 pages × 20 = 400 movies
+    for (let page = 1; page <= 20; page++) {
+      setStatus(`Fetching movies… page ${page}/20`);
+      setProgress(Math.round((page / 27) * 80));
+      try {
+        const res = await fetch(
+          `https://api.themoviedb.org/3/discover/movie?sort_by=vote_count.desc&vote_count.gte=500&include_adult=false&page=${page}`,
+          { headers: { Authorization: `Bearer ${TMDB_TOKEN}` } }
+        );
+        const data = await res.json();
+        for (const m of (data.results || [])) {
+          items.push({
+            user_id: userId,
+            title: m.title || m.original_title || 'Untitled',
+            year: m.release_date?.split('-')[0] || '',
+            type: 'Movie',
+            poster: m.poster_path ? `https://image.tmdb.org/t/p/w200${m.poster_path}` : null,
+            genre: TMDB_GENRES[m.genre_ids?.[0]] || null,
+            watched: false,
+            favorite: false,
+          });
+        }
+      } catch (_) {}
+    }
+
+    // ── Fetch top series: 5 pages × 20 = 100 series
+    for (let page = 1; page <= 5; page++) {
+      setStatus(`Fetching series… page ${page}/5`);
+      setProgress(Math.round(((20 + page) / 27) * 80));
+      try {
+        const res = await fetch(
+          `https://api.themoviedb.org/3/discover/tv?sort_by=vote_count.desc&vote_count.gte=500&include_adult=false&page=${page}`,
+          { headers: { Authorization: `Bearer ${TMDB_TOKEN}` } }
+        );
+        const data = await res.json();
+        for (const m of (data.results || [])) {
+          items.push({
+            user_id: userId,
+            title: m.name || m.original_name || 'Untitled',
+            year: m.first_air_date?.split('-')[0] || '',
+            type: 'Series',
+            poster: m.poster_path ? `https://image.tmdb.org/t/p/w200${m.poster_path}` : null,
+            genre: TMDB_GENRES[m.genre_ids?.[0]] || null,
+            watched: false,
+            favorite: false,
+          });
+        }
+      } catch (_) {}
+    }
+
+    // ── Deduplicate by title (case-insensitive)
+    const seen = new Set();
+    const unique = items.filter(m => {
+      const key = m.title.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // ── Batch insert 50 at a time
+    const batches = [];
+    for (let i = 0; i < unique.length; i += 50) batches.push(unique.slice(i, i + 50));
+
+    let inserted = 0;
+    for (let i = 0; i < batches.length; i++) {
+      setStatus(`Saving to library… ${inserted}/${unique.length}`);
+      setProgress(80 + Math.round((i / batches.length) * 20));
+      const { error } = await supabase.from('movies').insert(batches[i]);
+      if (!error) inserted += batches[i].length;
+    }
+
+    setCount(inserted);
+    setProgress(100);
+    setStatus('Done!');
+    setDone(true);
+    setRunning(false);
+    onDone();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-6">
+      <div className="w-full max-w-sm bg-[#16161d] rounded-3xl border border-white/10 p-8 text-center">
+        <Film size={36} className="text-yellow-500 mx-auto mb-4" />
+        <h2 className="text-xl font-black mb-1">Import 500 Films</h2>
+        <p className="text-xs text-gray-500 mb-6">
+          Pulls the most-voted movies and series from TMDB — real posters, years, and genres included.
+        </p>
+
+        {!running && !done && (
+          <div className="space-y-3">
+            <button
+              onClick={run}
+              className="w-full bg-yellow-500 text-black font-black py-4 rounded-2xl hover:bg-yellow-400 transition-colors"
+            >
+              Start Import
+            </button>
+            <button
+              onClick={onClose}
+              className="w-full bg-white/5 text-gray-400 font-bold py-3 rounded-2xl border border-white/10 hover:bg-white/10 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {(running || done) && (
+          <div>
+            {/* Progress bar */}
+            <div className="w-full h-2 bg-[#1c1c26] rounded-full overflow-hidden mb-3">
+              <div
+                className="h-full bg-yellow-500 rounded-full transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="text-xs text-gray-400 mb-1">{progress}%</p>
+            <p className="text-[11px] text-gray-600">{status}</p>
+
+            {done && (
+              <div className="mt-6">
+                <p className="text-green-400 font-bold text-sm mb-4">
+                  ✓ {count} films added to your library!
+                </p>
+                <button
+                  onClick={onClose}
+                  className="w-full bg-yellow-500 text-black font-black py-4 rounded-2xl hover:bg-yellow-400 transition-colors"
+                >
+                  View Library
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Root App ────────────────────────────────────────────────────────────────
 export default function App() {
   const [user, setUser] = useState(null);
   const [movies, setMovies] = useState([]);
   const [view, setView] = useState('library');
+  const [showSeed, setShowSeed] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
@@ -576,12 +749,22 @@ export default function App() {
   }
 
   return (
-    <LibraryPage
-      movies={movies}
-      onToggle={toggleStatus}
-      onDelete={deleteMovie}
-      onLogout={() => supabase.auth.signOut()}
-      onOpenSearch={() => setView('search')}
-    />
+    <>
+      <LibraryPage
+        movies={movies}
+        onToggle={toggleStatus}
+        onDelete={deleteMovie}
+        onLogout={() => supabase.auth.signOut()}
+        onOpenSearch={() => setView('search')}
+        onOpenSeed={() => setShowSeed(true)}
+      />
+      {showSeed && (
+        <SeedModal
+          userId={user.id}
+          onClose={() => setShowSeed(false)}
+          onDone={fetchMovies}
+        />
+      )}
+    </>
   );
 }
