@@ -155,7 +155,7 @@ function ResultCard({ item, mediaType, added, onAdd }) {
 
 // ─── Search / Add Page ────────────────────────────────────────────────────────
 function SearchPage({ onBack, onAdded, existingTitles }) {
-  const [tab, setTab] = useState('search');
+  const [tab, setTab] = useState('discover');
   const [added, setAdded] = useState(new Set());
 
   const [query, setQuery] = useState('');
@@ -174,7 +174,33 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
   const [dirMovies, setDirMovies] = useState([]);
   const [dirMoviesLoading, setDirMoviesLoading] = useState(false);
 
+  // Discover
+  const [trending, setTrending] = useState([]);
+  const [trendingLoading, setTrendingLoading] = useState(false);
+  const [trendingLoaded, setTrendingLoaded] = useState(false);
+
   const isAdded = (item) => added.has(item.id) || existingTitles.has((item.title || item.name || '').toLowerCase());
+
+  useEffect(() => {
+    if (tab === 'discover' && !trendingLoaded) loadTrending();
+  }, [tab]);
+
+  const loadTrending = async () => {
+    setTrendingLoading(true);
+    try {
+      const [movRes, tvRes] = await Promise.all([
+        fetch('https://api.themoviedb.org/3/trending/movie/day?page=1', TMDB_HEADERS),
+        fetch('https://api.themoviedb.org/3/trending/tv/day?page=1', TMDB_HEADERS),
+      ]);
+      const [movData, tvData] = await Promise.all([movRes.json(), tvRes.json()]);
+      const movs = (movData.results || []).map(m => ({ ...m, _mediaType: 'Movie' }));
+      const tvs  = (tvData.results  || []).map(m => ({ ...m, _mediaType: 'Series' }));
+      const merged = [...movs, ...tvs].sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+      setTrending(merged);
+      setTrendingLoaded(true);
+    } catch (_) {}
+    setTrendingLoading(false);
+  };
 
   const addToLibrary = async (item, type) => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -253,6 +279,7 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
   };
 
   const TABS = [
+    { id: 'discover', icon: <Zap size={15} />,     label: 'Hot' },
     { id: 'search',   icon: <Search size={15} />,  label: 'Search' },
     { id: 'genre',    icon: <Film size={15} />,     label: 'Genre' },
     { id: 'industry', icon: <Globe size={15} />,    label: 'Industry' },
@@ -269,10 +296,10 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
             <h2 className="text-lg font-black">Add Films</h2>
           </div>
         </div>
-        <div className="flex gap-1 bg-[#111116] p-1 rounded-2xl">
+        <div className="flex gap-1 bg-[#111116] p-1 rounded-2xl overflow-x-auto scrollbar-hide">
           {TABS.map(t => (
             <button key={t.id} onClick={() => { setTab(t.id); setActiveBrowse(null); setBrowseResults([]); }}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[11px] font-black transition-all ${
+              className={`flex-shrink-0 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-[11px] font-black transition-all ${
                 tab === t.id ? 'bg-yellow-500 text-black shadow-lg' : 'text-gray-500 hover:text-gray-300'
               }`}>
               {t.icon}<span>{t.label}</span>
@@ -280,6 +307,101 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
           ))}
         </div>
       </div>
+
+      {/* Discover tab */}
+      {tab === 'discover' && (
+        <div className="p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-xs text-gray-600 uppercase tracking-widest font-black">Trending Today</p>
+              <p className="text-[10px] text-gray-700 mt-0.5">Updated daily · Movies & Series</p>
+            </div>
+            <button onClick={() => { setTrendingLoaded(false); loadTrending(); }}
+              className="text-[10px] text-yellow-600 font-bold border border-yellow-600/30 px-3 py-1.5 rounded-full hover:bg-yellow-500/10 transition-colors">
+              Refresh
+            </button>
+          </div>
+
+          {trendingLoading && (
+            <div className="space-y-3">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="flex bg-[#16161d] p-3 rounded-2xl gap-3 border border-white/5 items-center animate-pulse">
+                  <div className="w-12 h-[72px] bg-[#1c1c26] rounded-xl flex-shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 bg-[#1c1c26] rounded w-3/4" />
+                    <div className="h-2 bg-[#1c1c26] rounded w-1/3" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!trendingLoading && trending.length > 0 && (
+            <>
+              {/* Rank 1 hero card */}
+              {(() => {
+                const hero = trending[0];
+                const heroTitle = hero.title || hero.name;
+                const heroYear = (hero.release_date || hero.first_air_date || '').split('-')[0];
+                const heroGenre = hero.genre_ids?.[0] ? TMDB_GENRES[hero.genre_ids[0]] : null;
+                const heroAdded = isAdded(hero);
+                return (
+                  <div className="relative rounded-3xl overflow-hidden mb-4 border border-white/10">
+                    {hero.backdrop_path && (
+                      <img src={`https://image.tmdb.org/t/p/w780${hero.backdrop_path}`}
+                        className="w-full h-40 object-cover" alt="" />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 p-4 flex items-end justify-between">
+                      <div>
+                        <div className="text-[9px] font-black text-yellow-500 uppercase tracking-widest mb-1">🔥 #1 Trending</div>
+                        <p className="text-base font-black text-white leading-tight">{heroTitle}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          {heroYear && <span className="text-xs text-yellow-400 font-bold">{heroYear}</span>}
+                          {heroGenre && <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${genreColor(heroGenre)}`}>{heroGenre}</span>}
+                        </div>
+                      </div>
+                      <button onClick={() => !heroAdded && addToLibrary(hero, hero._mediaType)}
+                        className={`flex-shrink-0 text-xs font-black px-4 py-2.5 rounded-xl transition-all ${
+                          heroAdded ? 'bg-green-900/60 text-green-400' : 'bg-yellow-500 text-black hover:bg-yellow-400 active:scale-95'
+                        }`}>
+                        {heroAdded ? '✓ Added' : '+ Add'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Rest of trending */}
+              <div className="space-y-3">
+                {trending.slice(1).map((item, i) => (
+                  <div key={item.id} className="flex bg-[#16161d] p-3 rounded-2xl gap-3 border border-white/5 items-center">
+                    <span className="text-[11px] font-black text-gray-700 w-5 text-center flex-shrink-0">#{i+2}</span>
+                    {item.poster_path
+                      ? <img src={`https://image.tmdb.org/t/p/w200${item.poster_path}`} className="w-11 h-[66px] object-cover rounded-xl flex-shrink-0" alt="" />
+                      : <div className="w-11 h-[66px] bg-[#1c1c26] rounded-xl flex-shrink-0 flex items-center justify-center"><Film size={14} className="text-gray-700" /></div>
+                    }
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold truncate">{item.title || item.name}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[9px] text-yellow-600 font-bold">{(item.release_date || item.first_air_date || '').split('-')[0]}</span>
+                        <span className="text-[9px] text-gray-600 uppercase">{item._mediaType}</span>
+                        {item.vote_average > 0 && <span className="text-[9px] text-gray-600">⭐ {item.vote_average.toFixed(1)}</span>}
+                      </div>
+                    </div>
+                    <button onClick={() => !isAdded(item) && addToLibrary(item, item._mediaType)}
+                      className={`flex-shrink-0 text-[10px] font-black px-3 py-2 rounded-xl transition-all ${
+                        isAdded(item) ? 'bg-green-900/40 text-green-400' : 'bg-yellow-500 text-black hover:bg-yellow-400 active:scale-95'
+                      }`}>
+                      {isAdded(item) ? '✓' : '+'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Search tab */}
       {tab === 'search' && (
@@ -1180,9 +1302,20 @@ export default function App() {
     if (!error) setMovies(data);
   };
 
-  const toggleStatus = async (id, field, val) => { await supabase.from('movies').update({ [field]: !val }).eq('id', id); fetchMovies(); };
-  const rateMovie    = async (id, rating)       => { await supabase.from('movies').update({ rating }).eq('id', id); fetchMovies(); };
-  const deleteMovie  = async (id) => { const { error } = await supabase.from('movies').delete().eq('id', id); if (error) alert(error.message); else fetchMovies(); };
+  // Optimistic updates — UI responds instantly, syncs to Supabase in background
+  const toggleStatus = async (id, field, val) => {
+    setMovies(prev => prev.map(m => m.id === id ? { ...m, [field]: !val } : m));
+    await supabase.from('movies').update({ [field]: !val }).eq('id', id);
+  };
+  const rateMovie = async (id, rating) => {
+    setMovies(prev => prev.map(m => m.id === id ? { ...m, rating } : m));
+    await supabase.from('movies').update({ rating }).eq('id', id);
+  };
+  const deleteMovie = async (id) => {
+    setMovies(prev => prev.filter(m => m.id !== id));
+    const { error } = await supabase.from('movies').delete().eq('id', id);
+    if (error) { alert(error.message); fetchMovies(); }
+  };
 
   if (!user) return <LoginScreen />;
 
