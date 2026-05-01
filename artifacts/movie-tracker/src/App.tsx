@@ -118,21 +118,32 @@ function SearchPage({ onBack, onAdded, existingIds }) {
 
   const addToLibrary = async (item) => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) { alert('You must be logged in.'); return; }
+
     const primaryGenreId = item.genre_ids?.[0];
     const genre = primaryGenreId ? TMDB_GENRES[primaryGenreId] || null : null;
-    const { error } = await supabase.from('movies').insert([{
+
+    // Insert core fields first (always works with the base schema)
+    const { data: inserted, error } = await supabase.from('movies').insert([{
       user_id: user.id,
       title: item.title || item.name,
       year: (item.release_date || item.first_air_date || '').split('-')[0],
       type: item.media_type === 'tv' ? 'Series' : 'Movie',
       poster: item.poster_path ? `https://image.tmdb.org/t/p/w200${item.poster_path}` : null,
-      genre: genre,
-    }]);
-    if (!error) {
-      setAdded(prev => new Set([...prev, item.id]));
-      onAdded();
+    }]).select('id').single();
+
+    if (error) {
+      alert('Could not add film: ' + error.message);
+      return;
     }
+
+    // Try to update genre — silently ignores if column doesn't exist yet
+    if (genre && inserted?.id) {
+      await supabase.from('movies').update({ genre }).eq('id', inserted.id);
+    }
+
+    setAdded(prev => new Set([...prev, item.id]));
+    onAdded();
   };
 
   return (
