@@ -237,6 +237,19 @@
   }
 }
 
+/* ─── Slide-up animation for modal ─── */
+@keyframes slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.animate-slide-up {
+  animation: slide-up 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+/* Hide scrollbar utility */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
 @layer utilities {
   input[type="search"]::-webkit-search-cancel-button {
     @apply hidden;
