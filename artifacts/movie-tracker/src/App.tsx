@@ -6,8 +6,9 @@ import {
   Film, X, Trash2, Star, Globe, Users, SlidersHorizontal,
   ChevronRight, BarChart2, Clock, Zap, Award, Download,
   Bookmark, Menu, Settings, User, ChevronDown, ChevronUp,
-  PlayCircle, TvMinimal, Clapperboard, RefreshCw,
+  PlayCircle, TvMinimal, Clapperboard, RefreshCw, Sparkles,
 } from 'lucide-react';
+import FlickScient from './FlickScient';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const TMDB_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI4MTA1NDM4MWYzY2M2NGY1ZjllNmVkNjVlMjIwNzgzYiIsIm5iZiI6MTc3NzU2MzkzNy4zMzIsInN1YiI6IjY5ZjM3OTIxZWFjNjM3MmZmYjBlNjAyNCIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.YgTiOJcH5eCqqrc3uWg6CvTNbvCa5UNzy4jpaeQ6zXs";
@@ -1617,19 +1618,32 @@ function SeedModal({ onClose, onDone, userId }) {
 function BottomNav({ view, setView }) {
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#0f0f13]/95 backdrop-blur-lg border-t border-white/5">
-      <div className="flex items-center justify-around py-2 px-8">
+      <div className="flex items-center justify-around py-2 px-2">
         <button onClick={() => setView('library')}
-          className={`flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all ${view==='library' ? 'text-yellow-500' : 'text-gray-600 hover:text-gray-400'}`}>
-          <Film size={22} strokeWidth={view==='library'?2.5:1.5} />
+          className={`flex flex-col items-center gap-1 px-3 py-2 rounded-2xl transition-all ${view==='library' ? 'text-yellow-500' : 'text-gray-600 hover:text-gray-400'}`}>
+          <Film size={20} strokeWidth={view==='library'?2.5:1.5} />
           <span className="text-[9px] font-black uppercase tracking-wider">Library</span>
         </button>
-        <button onClick={() => setView('search')}
-          className="w-14 h-14 bg-yellow-500 text-black rounded-full flex items-center justify-center shadow-lg shadow-yellow-500/30 hover:bg-yellow-400 transition-all active:scale-95 -mt-5">
-          <Plus size={26} strokeWidth={2.5} />
+
+        <button onClick={() => setView('flickscient')}
+          className={`flex flex-col items-center gap-1 px-3 py-2 rounded-2xl transition-all ${
+            view==='flickscient'
+              ? 'text-purple-400'
+              : 'text-gray-600 hover:text-purple-400'
+          }`}>
+          <Sparkles size={20} strokeWidth={view==='flickscient'?2.5:1.5} />
+          <span className="text-[9px] font-black uppercase tracking-wider">AI</span>
         </button>
+
+        <button onClick={() => setView('search')}
+          className="w-13 h-13 bg-yellow-500 text-black rounded-full flex items-center justify-center shadow-lg shadow-yellow-500/30 hover:bg-yellow-400 transition-all active:scale-95 -mt-5"
+          style={{ width: 52, height: 52 }}>
+          <Plus size={24} strokeWidth={2.5} />
+        </button>
+
         <button onClick={() => setView('stats')}
-          className={`flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all ${view==='stats' ? 'text-yellow-500' : 'text-gray-600 hover:text-gray-400'}`}>
-          <BarChart2 size={22} strokeWidth={view==='stats'?2.5:1.5} />
+          className={`flex flex-col items-center gap-1 px-3 py-2 rounded-2xl transition-all ${view==='stats' ? 'text-yellow-500' : 'text-gray-600 hover:text-gray-400'}`}>
+          <BarChart2 size={20} strokeWidth={view==='stats'?2.5:1.5} />
           <span className="text-[9px] font-black uppercase tracking-wider">Stats</span>
         </button>
       </div>
@@ -1703,6 +1717,16 @@ export default function App() {
           user={user} onOpenDrawer={() => setDrawerOpen(true)} onEpisodeUpdate={updateEpisodes} />
       )}
       {view === 'stats' && <StatsPage movies={movies} />}
+      {view === 'flickscient' && (
+        <div className="min-h-screen bg-[#0a0a0c] pt-0 pb-20">
+          <div className="pt-10 pb-0 px-5 bg-[#0f0f13] border-b border-white/5">
+            <p className="text-[9px] uppercase tracking-[0.35em] text-gray-500">The Ultimate Canon</p>
+            <h1 className="text-2xl font-black mt-0.5 text-purple-400">FlickScient</h1>
+            <p className="text-[9px] text-gray-700 mt-0.5 pb-4">AI Film Companion · powered by GPT</p>
+          </div>
+          <FlickScient myList={movies} />
+        </div>
+      )}
 
       <BottomNav view={view} setView={setView} />
 
