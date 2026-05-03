@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { supabase } from './lib/supabase';
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles, User, RefreshCw, Clapperboard } from 'lucide-react';
 
@@ -11,13 +12,6 @@ interface Message {
 interface FlickScientProps {
   myList: any[];
 }
-
-// Resolve the API base — works in dev (proxied) and production
-const API_BASE = (() => {
-  const base = import.meta.env.BASE_URL || '/';
-  // Strip trailing slash, then prepend /api
-  return base.replace(/\/$/, '') + '/api';
-})();
 
 export default function FlickScient({ myList }: FlickScientProps) {
   const [messages, setMessages] = useState<Message[]>([
@@ -38,8 +32,8 @@ export default function FlickScient({ myList }: FlickScientProps) {
   const watchedTitles   = myList.filter(m => m.watched || m.status === 'watched').map(m => m.title).join(', ');
   const favoriteTitles  = myList.filter(m => m.favorite).map(m => m.title).join(', ');
   const watchlistTitles = myList.filter(m => m.status === 'watchlist').map(m => m.title).join(', ');
-
-  const handleSend = async (e: React.FormEvent) => {
+  
+     const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || loading) return;
 
@@ -48,56 +42,35 @@ export default function FlickScient({ myList }: FlickScientProps) {
     setMessages(prev => [...prev, { id: Date.now().toString(), sender: 'user', text: userQuery }]);
     setLoading(true);
 
-    const conversationHistory = messages
-      .slice(-6)
-      .map(msg => `${msg.sender === 'user' ? 'User' : 'FlickScient'}: ${msg.text}`)
-      .join('\n');
-
-    const systemPrompt = `You are FlickScient — the undisputed Final Boss of global cinema. You have encyclopedic knowledge of every movie and series ever made, across every country and era.
-
-Your tone is: lively, humorous, highly energetic, slightly sarcastic, but ultimately incredibly helpful and genuinely passionate about film. You speak like a film-bro who actually has a PhD in cinema. Short sentences. High energy.
-
-User's private library (DO NOT RECOMMEND THESE — they already know them):
-- Already watched: [${watchedTitles || 'None yet'}]
-- Their favorites: [${favoriteTitles || 'None yet'}]
-- Their watchlist: [${watchlistTitles || 'None yet'}]
-
-Rules:
-1. Give 2–3 elite recommendations that perfectly match their request/vibe.
-2. Format each as: **Title (Year)** — Director
-3. Follow with a punchy, witty 1–2 sentence explanation of WHY this film nails their specific vibe. No Wikipedia summaries.
-4. Keep the energy high and the prose sharp.
-5. If they ask a question about film (not a recommendation), answer it with your signature expert wit.
-
-Recent chat:
-${conversationHistory}`;
+    const systemPrompt = `You are FlickScient, the film oracle. 
+    User library: Watched: [${watchedTitles}], Favorites: [${favoriteTitles}]. 
+    Give 2-3 elite movie suggestions.`;
 
     try {
-      const res = await fetch(`${API_BASE}/flickscient/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: `${systemPrompt}\n\nUser: "${userQuery}"` }),
+      // THIS IS THE CRITICAL PART: It calls your Supabase Edge Function directly
+      const { data, error } = await supabase.functions.invoke('flick-scientist-bot', {
+        body: { prompt: `My Library: ${watchedTitles}. User Message: ${userQuery}` }
       });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(),
-        sender: 'ai',
-        text: data.text,
+      if (error) throw error;
+
+      setMessages(prev => [...prev, { 
+        id: (Date.now() + 1).toString(), 
+        sender: 'ai', 
+       text: data.message || data.error||data.reply || data.text || "My vision is a bit blurry. Try again?"
       }]);
-    } catch (err) {
-      console.error('FlickScient error:', err);
-      setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(),
-        sender: 'ai',
-        text: "Oof. My cinematic brain just hit a buffer. Check your connection and try again in a second.",
+    } catch (error) {
+      console.error("AI Error:", error);
+      setMessages(prev => [...prev, { 
+        id: 'err', 
+        sender: 'ai', 
+        text: "Oof. My cinematic brain just hit a buffer. Check your connection." 
       }]);
     } finally {
       setLoading(false);
     }
   };
-
+    
   const clearChat = () => {
     setMessages([{
       id: 'reset',
