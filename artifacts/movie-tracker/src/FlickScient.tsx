@@ -34,43 +34,56 @@ export default function FlickScient({ myList }: FlickScientProps) {
   const watchlistTitles = myList.filter(m => m.status === 'watchlist').map(m => m.title).join(', ');
 
   const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || loading) return;
+  e.preventDefault();
+  if (!input.trim() || loading) return;
 
-    const userQuery = input.trim();
-    setInput('');
-    setMessages(prev => [...prev, { id: Date.now().toString(), sender: 'user', text: userQuery }]);
-    setLoading(true);
+  const userQuery = input.trim();
+  setInput('');
+  setMessages(prev => [...prev, { id: Date.now().toString(), sender: 'user', text: userQuery }]);
+  setLoading(true);
 
-    try {
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData?.user || null;
+  try {
+    const { data: authData } = await supabase.auth.getUser();
+    const user = authData?.user || null;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-      const { data, error } = await supabase.functions.invoke('flick-scientist-bot', {
-        body: {
+    const response = await fetch(
+      'https://rcdjmzxiectkckufyqyr.supabase.co/functions/v1/flick-scientist-bot',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${anonKey}`,
+          'apikey': anonKey // 💡 Crucial key that lets your Netlify site pass the firewall!
+        },
+        body: JSON.stringify({
           prompt: `My Library: ${watchedTitles}. User Message: ${userQuery}`,
           userId: user?.id || null,
-        },
-      });
+        }),
+      }
+    );
 
-      if (error) throw error;
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Edge function error');
 
-      setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(),
-        sender: 'ai',
-        text: data.message || data.reply || data.text || "My vision is a bit blurry. Try again?",
-      }]);
-    } catch (error: any) {
-      console.error("AI Error:", JSON.stringify(error));
-      setMessages(prev => [...prev, {
-        id: 'err-' + Date.now(),
-        sender: 'ai',
-        text: "DEBUG: " + (error?.message || error?.context?.responseText || JSON.stringify(error)),
-      }]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    setMessages(prev => [...prev, {
+      id: (Date.now() + 1).toString(),
+      sender: 'ai',
+      // Added data.response here to ensure it perfectly catches the AI text payload
+      text: data.response || data.message || data.reply || data.text || "My vision is a bit blurry. Try again?",
+    }]);
+  } catch (error: any) {
+    console.error("AI Error:", error);
+    setMessages(prev => [...prev, {
+      id: 'err-' + Date.now(),
+      sender: 'ai',
+      text: "Oof. My cinematic brain just hit a buffer. Check your connection.",
+    }]);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const clearChat = () => {
     setMessages([{
