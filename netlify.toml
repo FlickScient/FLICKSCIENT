@@ -1,0 +1,9 @@
+[build]
+  base = "artifacts/movie-tracker"
+  command = "npm run build"
+  publish = "artifacts/movie-tracker/dist/public"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
