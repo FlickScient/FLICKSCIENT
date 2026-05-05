@@ -32,8 +32,8 @@ export default function FlickScient({ myList }: FlickScientProps) {
   const watchedTitles   = myList.filter(m => m.watched || m.status === 'watched').map(m => m.title).join(', ');
   const favoriteTitles  = myList.filter(m => m.favorite).map(m => m.title).join(', ');
   const watchlistTitles = myList.filter(m => m.status === 'watchlist').map(m => m.title).join(', ');
-  
-     const handleSend = async (e: React.FormEvent) => {
+
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || loading) return;
 
@@ -42,41 +42,36 @@ export default function FlickScient({ myList }: FlickScientProps) {
     setMessages(prev => [...prev, { id: Date.now().toString(), sender: 'user', text: userQuery }]);
     setLoading(true);
 
-    const systemPrompt = `You are FlickScient, the film oracle. 
-    User library: Watched: [${watchedTitles}], Favorites: [${favoriteTitles}]. 
-    Give 2-3 elite movie suggestions.`;
-
     try {
-      // THIS IS THE CRITICAL PART: It calls your Supabase Edge Function directly
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user || null;
 
-const { data, error } = await supabase.functions.invoke('flick-scientist-bot', {
-  body: { 
-    prompt: `My Library: ${watchedTitles}. User Message: ${userQuery}`,
-    userId: user?.id || null
-  }
-});
-
+      const { data, error } = await supabase.functions.invoke('flick-scientist-bot', {
+        body: {
+          prompt: `My Library: ${watchedTitles}. User Message: ${userQuery}`,
+          userId: user?.id || null,
+        },
+      });
 
       if (error) throw error;
 
-      setMessages(prev => [...prev, { 
-        id: (Date.now() + 1).toString(), 
-        sender: 'ai', 
-       text: data.message || data.error||data.reply || data.text || "My vision is a bit blurry. Try again?"
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(),
+        sender: 'ai',
+        text: data.message || data.reply || data.text || "My vision is a bit blurry. Try again?",
       }]);
-    } catch (error) {
-      console.error("AI Error:", error);
-      setMessages(prev => [...prev, { 
-        id: 'err', 
-        sender: 'ai', 
-        text: "Oof. My cinematic brain just hit a buffer. Check your connection." 
+    } catch (error: any) {
+      console.error("AI Error:", JSON.stringify(error));
+      setMessages(prev => [...prev, {
+        id: 'err-' + Date.now(),
+        sender: 'ai',
+        text: "DEBUG: " + (error?.message || error?.context?.responseText || JSON.stringify(error)),
       }]);
     } finally {
       setLoading(false);
     }
   };
-    
+
   const clearChat = () => {
     setMessages([{
       id: 'reset',
@@ -111,8 +106,8 @@ const { data, error } = await supabase.functions.invoke('flick-scientist-bot', {
         <div className="px-5 py-2 bg-[#0f0f14] border-b border-white/5 flex items-center gap-2 flex-shrink-0">
           <Sparkles size={11} className="text-purple-500 flex-shrink-0" />
           <p className="text-[10px] text-gray-600 truncate">
-            <span className="text-purple-600 font-bold">{myList.filter(m=>m.watched||m.status==='watched').length} watched</span>
-            {' '}· <span className="text-blue-600 font-bold">{myList.filter(m=>m.status==='watchlist').length} in watchlist</span>
+            <span className="text-purple-600 font-bold">{myList.filter(m => m.watched || m.status === 'watched').length} watched</span>
+            {' '}· <span className="text-blue-600 font-bold">{myList.filter(m => m.status === 'watchlist').length} in watchlist</span>
             {' '}· recommendations exclude your library
           </p>
         </div>
@@ -134,7 +129,6 @@ const { data, error } = await supabase.functions.invoke('flick-scientist-bot', {
                 ? 'bg-[#1a1a24] text-gray-100 border-white/5 font-medium rounded-tr-none ml-6'
                 : 'bg-gradient-to-b from-[#121218] to-[#0f0f14] text-gray-200 border-white/5 rounded-tl-none mr-6 shadow-md'
             }`}>
-              {/* Render bold markdown **text** */}
               {msg.text.split(/(\*\*[^*]+\*\*)/).map((part, i) =>
                 part.startsWith('**') && part.endsWith('**')
                   ? <strong key={i} className="text-yellow-400 font-black">{part.slice(2, -2)}</strong>
