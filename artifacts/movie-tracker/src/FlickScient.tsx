@@ -48,9 +48,15 @@ export default function FlickScient({ myList }: FlickScientProps) {
 
     try {
       // THIS IS THE CRITICAL PART: It calls your Supabase Edge Function directly
-      const { data, error } = await supabase.functions.invoke('flick-scientist-bot', {
-        body: { prompt: `My Library: ${watchedTitles}. User Message: ${userQuery}` }
-      });
+      const { data: { user } } = await supabase.auth.getUser();
+
+const { data, error } = await supabase.functions.invoke('flick-scientist-bot', {
+  body: { 
+    prompt: `My Library: ${watchedTitles}. User Message: ${userQuery}`,
+    userId: user?.id || null
+  }
+});
+
 
       if (error) throw error;
 
