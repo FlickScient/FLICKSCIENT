@@ -48,8 +48,8 @@ export default function FlickScient({ myList }: FlickScientProps) {
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
     const response = await fetch(
-      'https://rcdjmzxiectkckufyqyr.supabase.co/functions/v1/flick-scientist-bot',
-      {
+  'https://huxgofwunpmoeygxlbyr.supabase.co/functions/v1/flick-scientist-bot',
+  {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -77,7 +77,7 @@ export default function FlickScient({ myList }: FlickScientProps) {
     setMessages(prev => [...prev, {
       id: 'err-' + Date.now(),
       sender: 'ai',
-      text: "Oof. My cinematic brain just hit a buffer. Check your connection.",
+      text: "ERROR: " + (error?.message || String(error)),
     }]);
   } finally {
     setLoading(false);
