@@ -48,7 +48,7 @@ export default function FlickScient({ myList }: FlickScientProps) {
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
     const response = await fetch(
-  'https://huxgofwunpmoeygxlbyr.supabase.co/functions/v1/flick-scientist-bot',
+  'https://rcdjmzxiectkckufyqyr.supabase.co/functions/v1/flick-scientist-bot',
   {
         method: 'POST',
         headers: {
