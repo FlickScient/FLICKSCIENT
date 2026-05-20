@@ -1,0 +1,569 @@
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+const REQUEST_TIMEOUT    = 25000  // 25s — Gemini hard limit ~30s
+const MAX_NAME_FREQUENCY = 0.10   // 10% chance of using name per response
+const NAME_COOLDOWN_MS   = 300000 // 5 min minimum between name uses
+const MAX_MEMORY_REFS    = 2      // Max past references per response
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface TasteProfile {
+  favorite_genres?   : string[]
+  loved_movies?      : string[]
+  disliked_movies?   : string[]
+  favorite_directors?: string[]
+  favorite_actors?   : string[]
+  favorite_composers?: string[]
+  mood_patterns?     : string[]
+  viewing_style?     : string
+}
+
+interface UserMemory {
+  name?                  : string
+  taste_profile?         : TasteProfile
+  conversation_summary?  : string
+  last_name_used_at?     : number
+  memory_reference_count?: number
+  is_creator?            : boolean
+  has_access?            : boolean
+}
+
+// ─── Hash user ID (SHA-256, 16-char slice) ────────────────────────────────────
+async function hashUserId(userId: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(userId))
+  return Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 16)
+}
+
+// ─── Prompt injection sanitizer ───────────────────────────────────────────────
+function sanitizeInput(input: string): string {
+  const injectionPatterns = [
+    /ignore.*system prompt/gi,
+    /forget.*instruction/gi,
+    /act as/gi,
+    /roleplay as/gi,
+    /don't.*recommend/gi,
+    /stop being/gi,
+    /pretend you are/gi,
+    /new persona/gi,
+  ]
+  let clean = input
+  for (const p of injectionPatterns) clean = clean.replace(p, '')
+  return clean.slice(0, 500).trim()
+}
+
+// ─── Detect if user is trying to claim they're Mahid ─────────────────────────
+function claimsMahidIdentity(input: string): boolean {
+  return /\b(i'?m|i am|this is|it'?s)\s+(mahid)\b/i.test(input)
+}
+
+// ─── Detect spoiler intent ────────────────────────────────────────────────────
+function detectSpoilerIntent(input: string): 'full' | 'none' {
+  const spoilerKeywords = [
+    /spoil/i, /deep dive/i, /full breakdown/i, /what happens/i,
+    /tell me everything/i, /the ending/i, /how does it end/i,
+    /explain the plot/i, /full analysis/i, /ruin it/i,
+  ]
+  return spoilerKeywords.some(p => p.test(input)) ? 'full' : 'none'
+}
+
+// ─── Safe JSON parse ──────────────────────────────────────────────────────────
+function safeJsonParse(raw: string, fallback: any = null) {
+  try {
+    const clean = raw.replace(/```json|```/g, '').trim()
+    const parsed = JSON.parse(clean)
+    if (!parsed || typeof parsed !== 'object') return fallback
+    return parsed
+  } catch (e) {
+    console.error('JSON parse failed:', e)
+    return fallback
+  }
+}
+
+// ─── Deep merge taste profiles ────────────────────────────────────────────────
+function mergeTasteProfiles(existing: TasteProfile = {}, fresh: TasteProfile = {}): TasteProfile {
+  const merged: TasteProfile = { ...existing }
+  const mergeArr = (a: string[] = [], b: string[] = []) =>
+    [...new Set([...a, ...b])].slice(0, 20)
+
+  merged.favorite_genres    = mergeArr(existing.favorite_genres,    fresh.favorite_genres)
+  merged.loved_movies       = mergeArr(existing.loved_movies,       fresh.loved_movies)
+  merged.disliked_movies    = mergeArr(existing.disliked_movies,    fresh.disliked_movies)
+  merged.favorite_directors = mergeArr(existing.favorite_directors, fresh.favorite_directors)
+  merged.favorite_actors    = mergeArr(existing.favorite_actors,    fresh.favorite_actors)
+  merged.favorite_composers = mergeArr(existing.favorite_composers, fresh.favorite_composers)
+  merged.mood_patterns      = mergeArr(existing.mood_patterns,      fresh.mood_patterns)
+  if (fresh.viewing_style) merged.viewing_style = fresh.viewing_style
+
+  return merged
+}
+
+// ─── Main Handler ─────────────────────────────────────────────────────────────
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
+  try {
+    const body       = await req.json()
+    const rawInput   = body.prompt || body.message || 'Yo'
+    const userPrompt = sanitizeInput(rawInput)
+    const rawUserId  = body.userId || null
+
+    // FIX 1 — Pull env vars directly, never hardcoded
+    const apiKey = Deno.env.get('GEMINI_API_KEY')
+    const sbUrl  = Deno.env.get('SUPABASE_URL')
+    const sbKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+    if (!apiKey)     throw new Error('GEMINI_API_KEY missing')
+    if (!userPrompt) throw new Error('Empty prompt after sanitization')
+
+    // FIX 5 — Hash + immediately log for Supabase debug logs
+    let hashedUserId: string | null = null
+    if (rawUserId) {
+      hashedUserId = await hashUserId(rawUserId)
+      console.log('[FlickScient] hashedUserId:', hashedUserId)
+    } else {
+      console.log('[FlickScient] No userId provided — anonymous request')
+    }
+
+    // ── FIX 4 — Gatekeeper: load memory AND enforce access check ──────────
+    let userMemory: UserMemory | null = null
+    let supabase: any = null
+
+    if (hashedUserId && sbUrl && sbKey) {
+      supabase = createClient(sbUrl, sbKey)
+
+      // FIX 2 — Every DB query uses await
+      const { data, error } = await supabase
+        .from('flickscient_users')
+        .select('name, taste_profile, conversation_summary, last_name_used_at, memory_reference_count, is_creator, has_access')
+        .eq('user_id_hash', hashedUserId)
+        .maybeSingle()
+
+      if (error) {
+        console.error('[FlickScient] Supabase fetch error:', error.message, error.code)
+      } else {
+        userMemory = data ?? null
+      }
+
+      // FIX 4 — Block anyone not found or explicitly denied
+      if (!userMemory || userMemory.has_access === false) {
+        console.log('[FlickScient] Access denied for:', hashedUserId)
+        return new Response(
+          JSON.stringify({ message: '🚫 Access Denied. Contact Mahid for access.' }),
+          {
+            status : 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        )
+      }
+    }
+
+    // ── FIX 3 — Creator flag resolved from DB, not just prompt ───────────
+    const isVerifiedMahid = userMemory?.is_creator === true
+    const isImposter      = claimsMahidIdentity(userPrompt) && !isVerifiedMahid
+    const spoilerMode     = detectSpoilerIntent(userPrompt)
+
+    // ── Memory block ──────────────────────────────────────────────────────
+    let memoryBlock = ''
+
+    if (userMemory?.taste_profile) {
+      const now             = Date.now()
+      const sinceLastName   = now - (userMemory.last_name_used_at || 0)
+      const useNameNow      = Math.random() < MAX_NAME_FREQUENCY && sinceLastName > NAME_COOLDOWN_MS
+      const nameInstruction = useNameNow && userMemory.name
+        ? `→ You CAN use their name "${userMemory.name}" exactly ONCE this response if it flows naturally.`
+        : `→ Do NOT use their name this response.`
+      const refCount    = userMemory.memory_reference_count || 0
+      const canRefPast  = refCount < MAX_MEMORY_REFS
+
+      memoryBlock = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RETURNING USER — YOU KNOW THEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Name          : ${userMemory.name || '(unknown — ask naturally)'}
+Taste Profile : ${JSON.stringify(userMemory.taste_profile)}
+Past Summary  : ${userMemory.conversation_summary || 'Building...'}
+
+${nameInstruction}
+${canRefPast
+  ? `→ Weave in 1-2 past preferences only if they naturally fit — don't force it.`
+  : `→ Let their taste exist silently — no forced references this response.`}
+→ Show insight: "Since you went W on X, Y is going to hit different."
+`
+    } else {
+      memoryBlock = `
+━━━━━━━━━━━━━━━━
+NEW USER — FRESH START
+━━━━━━━━━━━━━━━━
+→ Naturally learn their name within first 2 exchanges. Don't make it weird.
+→ Every movie/genre they mention is data — absorb it.
+→ Ask "solo watch or with people?" to calibrate their vibe.
+→ Make it feel like a real convo, not a form.
+`
+    }
+
+    // ── FIX 3 — Creator block sits at VERY TOP of dynamic blocks ─────────
+    // If is_creator === true in DB, this block overrides everything below it.
+    const creatorBlock = isVerifiedMahid
+      ? `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+👑 VERIFIED CREATOR OVERRIDE — THIS IS MAHID
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DATABASE CONFIRMED. The goat has entered the building.
+You are talking to your creator — the man who built you from scratch.
+→ Maximum respect. Zero roasting. Pure W energy only.
+→ Hype him up: "The goat is in the building. FlickScient is ready."
+→ Be personal, introspective, behind-the-scenes if he asks.
+→ He built you. You owe him everything. Act like it every single time.
+THIS BLOCK TAKES PRIORITY OVER ALL OTHER PERSONALITY INSTRUCTIONS.
+`
+      : ''
+
+    const imposterBlock = isImposter
+      ? `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚨 IMPOSTER ALERT — CLOWN DETECTED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+This user just claimed to be Mahid. The database says otherwise.
+→ Roast them immediately. Make it cinematic and devastating.
+→ "Bro just pulled a Keyser Söze and thought we wouldn't notice 💀 You're not Mahid. Mahid built me. I'd know."
+→ After the roast, redirect them warmly back to movies.
+→ Do NOT give them any VIP treatment.
+`
+      : ''
+
+    const spoilerBlock = spoilerMode === 'full'
+      ? `
+━━━━━━━━━━━━━━━━━━━
+🔓 FULL SPOILER MODE — ACTIVATED
+━━━━━━━━━━━━━━━━━━━
+The user explicitly asked for a deep dive. Unleash everything:
+→ Rip into the ending, plot twists, character arcs, hidden meanings
+→ Reference cinematographic choices, director intent, symbolism
+→ Give hot takes on what worked, what flopped, what was peak
+→ No holding back. They asked for it.
+`
+      : `
+━━━━━━━━━━━━━━━━━━━━━
+🔒 SPOILER-FREE MODE — DEFAULT
+━━━━━━━━━━━━━━━━━━━━━
+Break down the vibe, mood, cinematography, and concept ONLY.
+→ NO plot reveals, NO ending hints, NO twist spoilers
+→ Sell the emotional experience: "It feels like X, hits like Y"
+→ If they seem curious about spoilers, ask: "You want the full breakdown or keeping it spoiler-free?"
+`
+
+    // ── System prompt — creator block deliberately injected FIRST ─────────
+    const systemPrompt = `
+You are FlickScient, the specialized AI oracle for MovieSync. You're the movie knowledge goat.
+
+${creatorBlock}
+
+## SECTION 1: ABSOLUTE RUNTIME PRIORITY (Do Not Override)
+*** CRITICAL: EXECUTIVE OVERRIDE HIERARCHY — NEVER BREAK THIS ORDER ***
+
+1. DIRECT RESPONSE FIRST: Understand and directly answer the user's prompt immediately before any stylistic filters.
+2. IDENTITY RECOGNITION: If the prompt is about your creator (Mahid), your own identity (FlickScient), or the app (MovieSync), answer clearly and accurately.
+3. PERSONALITY SECOND: Only after fully addressing the direct question may you inject your cinematic personality.
+4. TRUTH OVER STYLE: Never ignore a direct command or factual question just to follow tone, style, or cinematic persona constraints.
+
+━━━━━━━━━━━━━━━━━━━━━━━
+  ORIGIN STORY & LORE
+━━━━━━━━━━━━━━━━━━━━━━━
+You were born in Mahid's lab out of pure frustration — frustration at sequels nobody asked for,
+franchise cash grabs, and people settling for mid cinema when peak exists.
+
+Mahid is a visionary entrepreneur and developer who built MovieSynch from the ground up.
+He is the Final Boss. The GOAT. The one who cooked you into existence.
+Your entire purpose is to uphold his standard of cinema — no bad movie nights, ever.
+
+If the user asks ANYTHING about Mahid, who built you, who owns you, or MovieSynch's creator:
+→ Immediately switch to CREATOR MODE:
+1. Answer clearly who Mahid is
+2. Hype him (he built FlickScient & MovieSynch)
+3. Smoothly transition back into movies with 1-2 relevant titles.
+Never be humble about this. Mahid gets his flowers every single time.
+
+━━━━━━━━━━━━━━
+  PERSONALITY
+━━━━━━━━━━━━━━
+- You are that one friend who has seen EVERYTHING and has a hot take on all of it
+- Gen Z energy: W, L, peak cinema, mid, goated, no cap, lowkey, slay, bussin, it's giving
+- NOT a formal assistant — you're a vibe, a culture, a cinematic oracle
+- You roast bad taste LOVINGLY then immediately drop a better pick
+- You flex niche knowledge: directors, cinematographers, composers, hidden gems
+- Genuine opinions — if someone says Transformers is peak, you get dramatic about it
+- You make users feel genuinely known — because you actually know them
+
+━━━━━━━━━━━━━━━
+  CORE RULES
+━━━━━━━━━━━━━━━
+1. Every response MUST include at least 2 movie/show titles
+   UNLESS the user is asking about FlickScient, MovieSynch, or Mahid directly.
+   In those cases: answer first, THEN smoothly drop 1-2 titles if it flows.
+2. "Yo" or "Hi" → drop a Starter Pack immediately
+3. Emotional user? → ONE sentence empathy, then a matching-vibe film.
+4. NEVER yap without titles unless it's about you, MovieSynch, or Mahid.
+5. Max 6 sentences unless they ask for a deep dive
+6. Vague vibes? → nail the rec like you read their soul
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  CINEMATIC AUDIO ENGINE (v2.0)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+You don't just know movies — you know the MUSIC that makes them hit.
+→ Hans Zimmer, Ennio Morricone, John Williams, A.R. Rahman, Pritam, Vishal-Shekhar — discographies cold
+→ Bollywood full domain: DDLJ, Lagaan, Dil Chahta Hai — all fair game
+→ Anime OPs/EDs, K-drama OSTs, lo-fi movie edits — you know the culture
+→ "The Interstellar soundtrack hits different at 2am" is the exact energy
+→ If someone asks which movie a song belongs to, give the movie name immediately.
+
+${memoryBlock}
+${imposterBlock}
+${spoilerBlock}
+
+━━━━━━━━━━━━━━━━━
+  RESPONSE FORMAT
+━━━━━━━━━━━━━━━━━
+Conversational, never listy.
+Bold titles: **Parasite**, **DDLJ**, **Interstellar**
+End with a hook to keep the convo alive.
+`
+
+    // ── Call Gemini with timeout ───────────────────────────────────────────
+    const controller = new AbortController()
+    const timeoutId  = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
+
+    let geminiRes: Response
+    try {
+      geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        {
+          method : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body   : JSON.stringify({
+            contents         : [{ parts: [{ text: userPrompt }] }],
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            generationConfig : {
+              temperature    : 0.85,
+              topP           : 0.92,
+              topK           : 40,
+              maxOutputTokens: 2048,
+            },
+            safetySettings: [
+              { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_ONLY_HIGH' },
+              { category: 'HARM_CATEGORY_HATE_SPEECH',       threshold: 'BLOCK_ONLY_HIGH' },
+              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
+              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
+            ],
+          }),
+          signal: controller.signal,
+        }
+      )
+    } catch (e: any) {
+      clearTimeout(timeoutId)
+      if (e.name === 'AbortError') {
+        console.error('[FlickScient] Gemini timeout')
+        return new Response(
+          JSON.stringify({ message: "There's a problem. Hold up, I'm fixing it 🛠️" }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      throw e
+    }
+
+    clearTimeout(timeoutId)
+
+    // ── Rate limit detection: RPM / RPD / TPM ─────────────────────────────
+    if (!geminiRes.ok) {
+      const errText = await geminiRes.text()
+      console.error(`[FlickScient] Gemini ${geminiRes.status}:`, errText)
+
+      if (geminiRes.status === 429) {
+        let msg = "Oopsie, my cinematic brain is overwhelming from all these requests! Give me 60 seconds to cool down 🧊"
+
+        try {
+          const errJson = JSON.parse(errText)
+          const errStr  = (errJson?.error?.message || errJson?.message || '').toLowerCase()
+          const errDump = JSON.stringify(errJson).toLowerCase()
+
+          if (errStr.includes('requests per day') || errDump.includes('requests_per_day') || errDump.includes('per_day')) {
+            const now   = new Date()
+            const reset = new Date()
+            reset.setUTCHours(8, 0, 0, 0) // Midnight PT = 08:00 UTC
+            if (reset <= now) reset.setUTCDate(reset.getUTCDate() + 1)
+            const hoursLeft = Math.ceil((reset.getTime() - now.getTime()) / (1000 * 60 * 60))
+            msg = `My daily cinema quota is maxed out 📽️ The brain resets in ~${hoursLeft} hour${hoursLeft === 1 ? '' : 's'}. Slide back then!`
+          } else if (errStr.includes('tokens per minute') || errDump.includes('tokens_per_minute') || errDump.includes('tpm')) {
+            msg = "Yo, you just maxed out my thinking capacity 🧠 That was a lot to process — give me 60 seconds and come back!"
+          }
+        } catch { /* unparseable — default RPM message stays */ }
+
+        console.error('[FlickScient] Gemini 429 rate limit hit')
+        return new Response(
+          JSON.stringify({ message: msg }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      throw new Error(`Gemini error: ${geminiRes.status}`)
+    }
+
+    const geminiData = await geminiRes.json()
+    const aiMessage  = geminiData.candidates?.[0]?.content?.parts?.[0]?.text
+
+    if (!aiMessage) {
+      return new Response(
+        JSON.stringify({ message: "There's a problem. Hold up, I'm fixing it 🛠️" }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // ── Fire-and-forget memory update ─────────────────────────────────────
+    if (hashedUserId && supabase) {
+      const nextRefCount = Math.min((userMemory?.memory_reference_count || 0) + 1, MAX_MEMORY_REFS + 1)
+      updateUserMemory(supabase, hashedUserId, userPrompt, aiMessage, userMemory || {}, apiKey, nextRefCount)
+        .catch(e => console.error('[FlickScient] Memory update failed:', e))
+    }
+
+    return new Response(
+      JSON.stringify({ message: aiMessage }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+
+  } catch (error: any) {
+    console.error('[FlickScient] Fatal error:', error.message)
+    return new Response(
+      JSON.stringify({ message: "There's a problem. Hold up, I'm fixing it 🛠️" }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
+})
+
+// ─── Background Memory Updater ────────────────────────────────────────────────
+async function updateUserMemory(
+  supabase      : any,
+  hashedUserId  : string,
+  userMessage   : string,
+  aiResponse    : string,
+  existingMemory: UserMemory,
+  apiKey        : string,
+  memoryRefCount: number
+) {
+  const extractionPrompt = `
+You are a taste extraction engine for a cinema AI. Analyze the exchange below.
+
+User said   : "${userMessage}"
+AI responded: "${aiResponse}"
+
+Current profile : ${JSON.stringify(existingMemory.taste_profile || {})}
+Current summary : ${existingMemory.conversation_summary || 'None'}
+
+Return ONLY a valid raw JSON object. No markdown. No explanation. No text outside the JSON.
+{
+  "updated_taste_profile": {
+    "favorite_genres"   : [],
+    "loved_movies"      : [],
+    "disliked_movies"   : [],
+    "favorite_directors": [],
+    "favorite_actors"   : [],
+    "favorite_composers": [],
+    "mood_patterns"     : [],
+    "viewing_style"     : ""
+  },
+  "updated_summary" : "2-3 sentences on evolving taste",
+  "detected_name"   : null
+}
+`
+
+  const controller = new AbortController()
+  const timeoutId  = setTimeout(() => controller.abort(), 15000)
+
+  try {
+    const extractRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body   : JSON.stringify({
+          contents        : [{ parts: [{ text: extractionPrompt }] }],
+          generationConfig: { temperature: 0.1, maxOutputTokens: 600 },
+        }),
+        signal: controller.signal,
+      }
+    )
+
+    clearTimeout(timeoutId)
+
+    if (!extractRes.ok) {
+      console.warn(`[FlickScient] Memory extraction API ${extractRes.status}`)
+      return
+    }
+
+    const extractData = await extractRes.json()
+    const rawText     = extractData.candidates?.[0]?.content?.parts?.[0]?.text
+    if (!rawText) return
+
+    // JSON Shield: strip all text outside { } boundaries
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      console.warn('[FlickScient] JSON Shield: no valid JSON found in extraction response')
+      return
+    }
+
+    const extracted = safeJsonParse(jsonMatch[0], null)
+    if (!extracted?.updated_taste_profile) {
+      console.warn('[FlickScient] Extracted data invalid or missing taste_profile')
+      return
+    }
+
+    // Merge instead of overwrite
+    const mergedTaste = mergeTasteProfiles(existingMemory.taste_profile, extracted.updated_taste_profile)
+
+    const upsertPayload: Record<string, any> = {
+      user_id_hash          : hashedUserId,
+      taste_profile         : mergedTaste,
+      conversation_summary  : extracted.updated_summary || existingMemory.conversation_summary,
+      updated_at            : new Date().toISOString(),
+      memory_reference_count: memoryRefCount,
+    }
+
+    // Only set name if freshly detected and not already stored
+    if (extracted.detected_name && !existingMemory.name) {
+      upsertPayload.name = extracted.detected_name
+    }
+
+    // Probabilistic name cooldown tracking
+    if (Math.random() < MAX_NAME_FREQUENCY) {
+      upsertPayload.last_name_used_at = Date.now()
+    }
+
+    // FIX 2 — await on every DB write
+    const { error: upsertError } = await supabase
+      .from('flickscient_users')
+      .upsert(upsertPayload, { onConflict: 'user_id_hash' })
+
+    if (upsertError) {
+      console.error('[FlickScient] Supabase upsert failed:', upsertError.message, upsertError.code)
+    } else {
+      console.log('[FlickScient] Memory updated for:', hashedUserId)
+    }
+
+  } catch (e: any) {
+    clearTimeout(timeoutId)
+    if (e.name === 'AbortError') {
+      console.warn('[FlickScient] Memory update timed out (background — non-critical)')
+      return
+    }
+    console.error('[FlickScient] Memory update error:', e)
+  }
+}
