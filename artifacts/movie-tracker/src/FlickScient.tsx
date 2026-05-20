@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { supabase } from './lib/supabase';
+import { supabase, ANON_KEY_VALUE } from './lib/supabase';
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles, User, RefreshCw, Clapperboard } from 'lucide-react';
 
@@ -45,7 +45,7 @@ export default function FlickScient({ myList }: FlickScientProps) {
   try {
     const { data: authData } = await supabase.auth.getUser();
     const user = authData?.user || null;
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const anonKey = ANON_KEY_VALUE;
 
     const response = await fetch(
   'https://rcdjmzxiectkckufyqyr.supabase.co/functions/v1/flick-scientist-bot',
@@ -54,7 +54,7 @@ export default function FlickScient({ myList }: FlickScientProps) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${anonKey}`,
-          'apikey': anonKey // 💡 Crucial key that lets your Netlify site pass the firewall!
+          'apikey': anonKey
         },
         body: JSON.stringify({
           prompt: `My Library: ${watchedTitles}. User Message: ${userQuery}`,
@@ -69,7 +69,6 @@ export default function FlickScient({ myList }: FlickScientProps) {
     setMessages(prev => [...prev, {
       id: (Date.now() + 1).toString(),
       sender: 'ai',
-      // Added data.response here to ensure it perfectly catches the AI text payload
       text: data.response || data.message || data.reply || data.text || "My vision is a bit blurry. Try again?",
     }]);
   } catch (error: any) {
