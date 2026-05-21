@@ -123,8 +123,10 @@ function LoginScreen() {
     setLoading(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: 'https://moviesyncfs.vercel.app' },
-    });
+      options: { 
+  redirectTo: 'https://moviesyncfs.vercel.app',
+  queryParams: { prompt: 'select_account' }
+},
     if (error) { setMsg({ text: error.message, ok: false }); setLoading(false); }
   };
 
