@@ -1,6 +1,6 @@
 [build]
   base = "."
-  command = "npm install -g pnpm@9 && pnpm install --no-frozen-lockfile && pnpm --filter @workspace/movie-tracker run build"
+  command = "pnpm install --no-frozen-lockfile && pnpm --filter @workspace/movie-tracker run build"
   publish = "artifacts/movie-tracker/dist/public"
 
 [build.environment]
