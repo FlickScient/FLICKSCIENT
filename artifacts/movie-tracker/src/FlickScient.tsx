@@ -243,29 +243,22 @@ export default function FlickScient({ myList }) {
     setMessages(prev => [...prev, { id: Date.now().toString(), sender: 'user', text: userQuery }]);
     setLoading(true);
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData?.user || null;
-      const response = await fetch(
-        'https://rcdjmzxiectkckufyqyr.supabase.co/functions/v1/flick-scientist-bot',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON_KEY_VALUE}`, 'apikey': ANON_KEY_VALUE },
-          body: JSON.stringify({ prompt: `My Library: ${watchedTitles}. User Message: ${userQuery}`, userId: user?.id || null }),
-        }
-      );
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Edge function error');
+      // getSession() reads localStorage — no network call, never throws
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id || null;
+      // functions.invoke() is the correct Supabase way — handles CORS + auth properly
+      const { data, error: fnError } = await supabase.functions.invoke('flick-scientist-bot', {
+        body: { prompt: `My Library: ${watchedTitles}. User Message: ${userQuery}`, userId },
+      });
+      if (fnError) throw fnError;
       setMessages(prev => [...prev, {
         id: (Date.now()+1).toString(), sender: 'ai',
-        text: data.message || data.response || data.reply || data.text || "My vision is a bit blurry. Try again?",
+        text: data?.message || "My vision is a bit blurry. Try again?",
       }]);
     } catch (error) {
-      const isNet = /fetch|network|failed/i.test(error?.message || '');
       setMessages(prev => [...prev, {
         id: 'err-' + Date.now(), sender: 'ai',
-        text: isNet
-          ? "📡 Signal dropped mid-thought. Try sending again — I'm still here."
-          : `Something broke on my end: ${error?.message || 'Unknown error'}`,
+        text: "Something went wrong on my end — try again in a sec.",
       }]);
     } finally {
       setLoading(false);
