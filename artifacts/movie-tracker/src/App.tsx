@@ -113,7 +113,7 @@ function LoginScreen() {
     setMsg({ text: '', ok: false });
     const { error } = mode === 'login'
       ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: 'https://moviesyncfs.vercel.app' } });
+      : await supabase.auth.signUp({ email, password, options: { redirectTo: window.location.origin + '/auth/callback' } });
     if (error) setMsg({ text: error.message, ok: false });
     else if (mode === 'signup') setMsg({ text: 'Check your email to confirm your account ✓', ok: true });
     setLoading(false);
