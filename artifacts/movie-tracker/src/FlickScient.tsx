@@ -425,7 +425,18 @@ export default function FlickScient({ myList }) {
         )}
 
         <div className="flex-1 overflow-y-auto p-4 space-y-5 bg-[#0d0d12]">
-          {messages.map(msg => (
+          {messages.map(msg => {
+            const isAdminMsg = msg.sender === 'ai' && msg.text.startsWith('⚙️ [ADMIN]');
+            const adminDetail = isAdminMsg ? msg.text.replace('⚙️ [ADMIN]', '').trim() : '';
+            if (isAdminMsg) return (
+              <div key={msg.id} className="rounded-2xl border border-red-500/30 bg-red-950/30 p-4 text-[12px]">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-red-400 font-black uppercase tracking-widest text-[9px]">⚙️ Admin — Config Error</span>
+                </div>
+                <p className="text-red-300 leading-relaxed">{adminDetail}</p>
+              </div>
+            );
+            return (
             <div key={msg.id} className={`flex items-start gap-3 ${msg.sender==='user' ? 'flex-row-reverse' : ''}`}>
               <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-xs border shadow-lg ${msg.sender==='user' ? 'bg-purple-500 border-purple-400 text-white font-black' : 'bg-[#16161d] border-purple-500/30 text-purple-400'}`}>
                 {msg.sender==='user' ? <User size={15} /> : <Sparkles size={15} />}
@@ -438,7 +449,8 @@ export default function FlickScient({ myList }) {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
           {loading && (
             <div className="flex items-start gap-3">
               <div className="w-8 h-8 rounded-xl bg-[#16161d] border border-purple-500/30 flex items-center justify-center flex-shrink-0 text-purple-400">
