@@ -411,6 +411,7 @@ serve(async (req) => {
               topP           : 0.97,
               topK           : 50,
               maxOutputTokens: 2048,
+              thinkingConfig : { thinkingBudget: 0 },
             },
             safetySettings: [
               { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_ONLY_HIGH' },
