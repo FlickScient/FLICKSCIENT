@@ -1,5 +1,4 @@
 {
-  "rootDirectory": "artifacts/movie-tracker",
   "buildCommand": "pnpm install --no-frozen-lockfile --ignore-workspace && pnpm run build",
   "outputDirectory": "dist/public",
   "rewrites": [
