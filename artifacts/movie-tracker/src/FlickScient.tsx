@@ -208,8 +208,10 @@ export default function FlickScient({ myList }) {
   const [aiTab,      setAiTab]      = useState('chat');
   const [sessionId,  setSessionId]  = useState(() => 'sid_' + Date.now());
   const [sessions,   setSessions]   = useState(() => loadSessions());
-  const chatBottomRef = useRef(null);
-  const textareaRef   = useRef(null);
+  const chatBottomRef    = useRef(null);
+  const textareaRef      = useRef(null);
+  const typingIntervalRef = useRef(null);
+  const [typingMsgId, setTypingMsgId] = useState(null);
 
   useEffect(() => { chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
 
@@ -237,6 +239,22 @@ export default function FlickScient({ myList }) {
 
   const watchedTitles = myList.filter(m => m.watched || m.status === 'watched').map(m => m.title).join(', ');
 
+  const animateText = useCallback((fullText, msgId) => {
+    if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
+    const words = fullText.split(' ');
+    let idx = 0;
+    setMessages(prev => [...prev, { id: msgId, sender: 'ai', text: '' }]);
+    setTypingMsgId(msgId);
+    typingIntervalRef.current = setInterval(() => {
+      idx++;
+      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: words.slice(0, idx).join(' ') } : m));
+      if (idx >= words.length) {
+        clearInterval(typingIntervalRef.current);
+        setTypingMsgId(null);
+      }
+    }, 22);
+  }, []);
+
   const sendMessage = async (text) => {
     if (!text.trim() || loading) return;
     const userQuery = text.trim();
@@ -251,24 +269,19 @@ export default function FlickScient({ myList }) {
         body: { prompt: `My Library: ${watchedTitles}. User Message: ${userQuery}`, userId },
       });
       if (fnError) throw fnError;
-      setMessages(prev => [...prev, {
-        id: (Date.now()+1).toString(), sender: 'ai',
-        text: data?.message || "My vision is a bit blurry. Try again?",
-      }]);
+      const aiText = data?.message || "My vision is a bit blurry. Try again?";
+      setLoading(false);
+      animateText(aiText, String(Date.now() + 1));
     } catch (error) {
-      // FunctionsHttpError carries the response body — read the message from it
       let errMsg = "Something broke on my end — try again in a sec. 🛠️";
       try {
         if (error?.context) {
           const body = await error.context.json();
           if (body?.message) errMsg = body.message;
-        } else if (error?.message && !/http|fetch|invoke/i.test(error.message)) {
-          errMsg = error.message;
         }
       } catch {}
-      setMessages(prev => [...prev, { id: 'err-' + Date.now(), sender: 'ai', text: errMsg }]);
-    } finally {
       setLoading(false);
+      setMessages(prev => [...prev, { id: 'err-' + Date.now(), sender: 'ai', text: errMsg }]);
     }
   };
 
