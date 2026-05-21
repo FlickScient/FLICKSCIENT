@@ -269,6 +269,17 @@ function buildMahidAnswer(isVerifiedMahid: boolean): string {
   return `Mahid built me — he's the developer and entrepreneur behind MovieSync and FlickScient. Engineered this whole thing from zero, pure vision, no template. The man had a standard and built an AI to uphold it. Now, `
 }
 
+// ─── Admin error helper ───────────────────────────────────────────────────────
+function adminErr(isCreator: boolean, real: string, generic: string): Response {
+  const msg = isCreator
+    ? `⚙️ [ADMIN] ${real}`
+    : generic
+  return new Response(
+    JSON.stringify({ message: msg }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 serve(async (req) => {
 
@@ -276,19 +287,21 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  // ── Pull env vars up-front (never throws) ─────────────────────────────────
+  const apiKey       = Deno.env.get('GEMINI_API_KEY')
+  const sbUrl        = Deno.env.get('SUPABASE_URL')
+  const sbKey        = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const creatorEmail = (Deno.env.get('CREATOR_EMAIL') || '').toLowerCase().trim()
+
+  let isCreatorOuter = false
+
   try {
     const body       = await req.json()
     const rawInput   = body.prompt || body.message || 'Yo'
     const userPrompt = sanitizeInput(rawInput)
     const rawUserId  = body.userId || null
 
-    const apiKey = Deno.env.get('GEMINI_API_KEY')
-    const sbUrl  = Deno.env.get('SUPABASE_URL')
-    const sbKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-
-    if (!apiKey)     throw new Error('GEMINI_API_KEY missing')
-    if (!userPrompt) throw new Error('Empty prompt after sanitization')
-
+    // ── Identify user + load memory first (works without GEMINI_API_KEY) ─────
     let hashedUserId: string | null = null
     if (rawUserId) {
       hashedUserId = await hashUserId(rawUserId)
@@ -297,27 +310,56 @@ serve(async (req) => {
       console.log('[FlickScient] Anonymous request')
     }
 
-    // ── Load memory ───────────────────────────────────────────────────────────
     let userMemory: UserMemory | null = null
     let supabase: any = null
+    let isCreator = false
 
-    if (hashedUserId && sbUrl && sbKey) {
+    if (sbUrl && sbKey) {
       supabase = createClient(sbUrl, sbKey)
-      const { data, error } = await supabase
-        .from('flickscient_users')
-        .select('name, taste_profile, conversation_summary, last_name_used_at, memory_reference_count, is_creator')
-        .eq('user_id_hash', hashedUserId)
-        .maybeSingle()
 
-      if (error) {
-        console.error('[FlickScient] DB fetch error:', error.message)
-      } else {
-        userMemory = data ?? null
+      // Check creator by email (most reliable)
+      if (rawUserId && creatorEmail) {
+        try {
+          const { data: authUser } = await supabase.auth.admin.getUserById(rawUserId)
+          const userEmail = (authUser?.user?.email || '').toLowerCase().trim()
+          if (userEmail && userEmail === creatorEmail) isCreator = true
+        } catch { /* non-fatal */ }
+      }
+
+      // Also honour is_creator flag in DB
+      if (hashedUserId) {
+        const { data, error } = await supabase
+          .from('flickscient_users')
+          .select('name, taste_profile, conversation_summary, last_name_used_at, memory_reference_count, is_creator')
+          .eq('user_id_hash', hashedUserId)
+          .maybeSingle()
+
+        if (error) {
+          console.error('[FlickScient] DB fetch error:', error.message)
+        } else {
+          userMemory = data ?? null
+          if (userMemory?.is_creator === true) isCreator = true
+        }
       }
     }
 
+    isCreatorOuter = isCreator
+
+    // ── Guard: API key ────────────────────────────────────────────────────────
+    if (!apiKey) {
+      return adminErr(
+        isCreator,
+        'GEMINI_API_KEY secret is missing. Add it in Supabase → Edge Functions → Secrets, then redeploy.',
+        "Hold on, be right back 🎬"
+      )
+    }
+
+    if (!userPrompt) {
+      return adminErr(isCreator, 'Empty prompt after sanitization.', "Didn't catch that — try again?")
+    }
+
     // ── Intent flags ──────────────────────────────────────────────────────────
-    const isVerifiedMahid      = userMemory?.is_creator === true
+    const isVerifiedMahid      = isCreator
     const isImposter           = claimsMahidIdentity(userPrompt) && !isVerifiedMahid
     const spoilerMode          = detectSpoilerIntent(userPrompt)
     const askingAboutMahid     = mentionsMahid(userPrompt) && !isVerifiedMahid
@@ -445,9 +487,10 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error('[FlickScient] Fatal error:', error.message)
-    return new Response(
-      JSON.stringify({ message: "Something broke on my end 🛠️ Try again in a sec." }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    return adminErr(
+      isCreatorOuter,
+      `Fatal error — ${error.message}`,
+      "Hold on, be right back 🎬"
     )
   }
 })
