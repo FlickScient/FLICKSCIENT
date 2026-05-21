@@ -208,13 +208,15 @@ function LoginScreen() {
 
 // ─── Drawer Menu ──────────────────────────────────────────────────────────────
 function DrawerMenu({ open, onClose, user, onLogout, onOpenSeed }) {
-  if (!open) return null;
   const email = user?.email || '';
   const initials = email ? email[0].toUpperCase() : '?';
   return (
     <>
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]" onClick={onClose} />
-      <div className={`fixed top-0 left-0 bottom-0 w-72 bg-[#111116] z-[70] border-r border-white/5 flex flex-col shadow-2xl transition-transform duration-300 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div
+        className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] transition-opacity duration-300 ${open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        onClick={onClose}
+      />
+      <div className={`fixed top-0 left-0 bottom-0 w-72 bg-[#111116] z-[70] border-r border-white/5 flex flex-col shadow-2xl transition-transform duration-300 ease-in-out ${open ? 'translate-x-0' : '-translate-x-full'}`}>
         {/* Profile */}
         <div className="pt-14 pb-6 px-6 border-b border-white/5">
           <div className="flex items-center gap-4">
