@@ -1,33 +1,20 @@
-[[ports]]
-localPort = 3001
-externalPort = 3001
+modules = ["nodejs-24"]
 
-[[ports]]
-localPort = 5000
-externalPort = 80
+[deployment]
+router = "application"
+deploymentTarget = "autoscale"
 
-[[ports]]
-localPort = 5001
-externalPort = 3002
+[deployment.postBuild]
+args = ["pnpm", "store", "prune"]
+env = { "CI" = "true" }
 
-[[ports]]
-localPort = 5002
-externalPort = 3000
-
-[[ports]]
-localPort = 5003
-externalPort = 3003
-
-[[ports]]
-localPort = 5004
-externalPort = 4200
-
-[[ports]]
-localPort = 5173
-externalPort = 5173
+[workflows]
+runButton = "Project"
 
 [agent]
+stack = "PNPM_WORKSPACE"
 expertMode = true
 
-[nix]
-packages = ["nodejs-12_x"]
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000

@@ -47,3 +47,11 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Custom Project Overrides
+artifacts/
+attached_assets/
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
+artifacts/movie-tracker/.env
