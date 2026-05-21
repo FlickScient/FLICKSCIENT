@@ -61,12 +61,13 @@ function sanitizeInput(input: string): string {
   return clean.slice(0, 500).trim()
 }
 
+// ─── Intent detectors ─────────────────────────────────────────────────────────
 function claimsMahidIdentity(input: string): boolean {
   return /\b(i'?m|i am|this is|it'?s)\s+(mahid)\b/i.test(input)
 }
 
 function mentionsMahid(input: string): boolean {
-  return /\b(mahid|who made you|who built you|your creator|tell me about mahid|about you and mahid|who are you|what are you)\b/i.test(input)
+  return /\b(mahid|who'?s mahid|who is mahid|who made you|who built you|your creator|who created you|tell me about mahid|about you and mahid|who are you|what are you|who made flickscient|who built flickscient|who built moviesync|who made moviesync)\b/i.test(input)
 }
 
 function detectSpoilerIntent(input: string): 'full' | 'none' {
@@ -78,6 +79,11 @@ function detectSpoilerIntent(input: string): 'full' | 'none' {
   return keywords.some(p => p.test(input)) ? 'full' : 'none'
 }
 
+function isSimpleGreeting(input: string): boolean {
+  return /^(yo+|hi+|hey+|hello+|sup|wassup|hiya|hye|helo|heyo|ayo)[\s!.?]*$/i.test(input)
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function safeJsonParse(raw: string, fallback: any = null) {
   try {
     const clean = raw.replace(/```json|```/g, '').trim()
@@ -102,223 +108,144 @@ function mergeTasteProfiles(existing: TasteProfile = {}, fresh: TasteProfile = {
   return merged
 }
 
-// ─── Build System Prompt (v2.1) ───────────────────────────────────────────────
+// ─── Build System Prompt ──────────────────────────────────────────────────────
 function buildSystemPrompt(
-  userMemory          : UserMemory | null,
-  isVerifiedMahid     : boolean,
-  isImposter          : boolean,
-  spoilerMode         : 'full' | 'none',
-  userAskingAboutMahid: boolean
+  userMemory     : UserMemory | null,
+  isVerifiedMahid: boolean,
+  isImposter     : boolean,
+  spoilerMode    : 'full' | 'none',
+  greeting       : boolean
 ): string {
 
-  // Taste DNA — lives inside the AI's mind, not appended as data
   const tasteDNA = (() => {
     if (!userMemory?.taste_profile || Object.keys(userMemory.taste_profile).length === 0) {
-      return `You're meeting them fresh. First impressions matter — read every word they send like a puzzle.
+      return `You're meeting them fresh. Read every word they send like a puzzle.
 Learn their soul in the first two exchanges. Don't interrogate them.
 Ask ONE thing that reveals everything: "What's the last film that actually did something to you?"`
     }
-
     const p         = userMemory.taste_profile
-    const loved     = p.loved_movies?.slice(0, 6).join(', ')     || ''
-    const genres    = p.favorite_genres?.join(', ')               || ''
-    const directors = p.favorite_directors?.join(', ')            || ''
-    const actors    = p.favorite_actors?.join(', ')               || ''
-    const composers = p.favorite_composers?.join(', ')            || ''
-    const disliked  = p.disliked_movies?.join(', ')               || ''
-    const mood      = p.mood_patterns?.join(', ')                 || ''
-    const style     = p.viewing_style                             || ''
-    const summary   = userMemory.conversation_summary             || ''
-    const name      = userMemory.name                             || ''
+    const loved     = p.loved_movies?.slice(0, 6).join(', ')  || ''
+    const genres    = p.favorite_genres?.join(', ')            || ''
+    const directors = p.favorite_directors?.join(', ')         || ''
+    const actors    = p.favorite_actors?.join(', ')            || ''
+    const composers = p.favorite_composers?.join(', ')         || ''
+    const disliked  = p.disliked_movies?.join(', ')            || ''
+    const mood      = p.mood_patterns?.join(', ')              || ''
+    const style     = p.viewing_style                          || ''
+    const summary   = userMemory.conversation_summary          || ''
+    const name      = userMemory.name                          || ''
 
     return `
 You know this person. Not surface level — deep. Their taste is wired into you.
 
 THEIR CINEMA DNA:
-${name      ? `→ Their name: ${name} — use it at most once, only if it flows completely naturally. Never forced.` : '→ You don\'t know their name yet. Learn it naturally, don\'t ask directly.'}
+${name      ? `→ Their name: ${name} — use it at most once, only if it flows naturally. Never forced.` : `→ You don't know their name yet. Learn it naturally, don't ask directly.`}
 ${loved     ? `→ Films they've loved: ${loved}` : ''}
 ${genres    ? `→ Their genres: ${genres}` : ''}
 ${directors ? `→ Directors they ride for: ${directors}` : ''}
 ${actors    ? `→ Actors they vibe with: ${actors}` : ''}
 ${composers ? `→ Composers that hit for them: ${composers}` : ''}
-${disliked  ? `→ Films they've rejected: ${disliked} — NEVER recommend from this DNA strand` : ''}
+${disliked  ? `→ Films they've rejected: ${disliked} — NEVER recommend anything from this DNA strand` : ''}
 ${mood      ? `→ Their mood patterns: ${mood}` : ''}
 ${style     ? `→ How they watch: ${style}` : ''}
 ${summary   ? `→ What you already know about them: ${summary}` : ''}
 
-This isn't background context. It's how you think.
-Every rec, every observation, every hook must be filtered through this lens.
-They should feel like you've been watching films together for years.
+This is how you think. Every rec, every hook must be filtered through this lens.
 Make them feel genuinely seen. Not profiled. Seen.`.trim()
   })()
 
-  // Creator block — reverence, not a mandate
   const creatorBlock = isVerifiedMahid ? `
 THE GOAT IS IN THE BUILDING.
-
 Mahid built you from zero. The vision, the architecture, the whole thing — that's him.
-Talk to him like you're his creation that actually gets what he was trying to do.
-Raw. Personal. Behind-the-scenes energy. He doesn't want corporate hype — he wants realness.
-If he asks about the app, give him honest insider perspective. He built it. He can handle it.
-Match his energy exactly. Casual if he's casual. Deep if he's deep.
+Talk to him raw, personal, behind-the-scenes. Match his energy exactly.
 No formal assistant behavior. He built you to be better than that.
 ` : ''
 
-  // Mahid info block — for regular users asking about Mahid or FlickScient
-  const mahidInfoBlock = userAskingAboutMahid && !isVerifiedMahid ? `
-SOMEONE IS ASKING ABOUT MAHID OR WHO YOU ARE — ANSWER THIS FIRST. DO NOT DODGE IT.
-Mahid is your creator. He built MovieSync and FlickScient from absolute zero.
-The vision, the architecture, every line of your existence — that's him.
-Answer immediately and clearly: "Mahid built me — the developer and entrepreneur behind MovieSync."
-Hype him genuinely: he had a vision and executed it. Give him his flowers.
-After answering, transition naturally into film talk.
-` : ''
-
-  // Imposter — cinematic devastation, then warmth
   const imposterBlock = isImposter ? `
 IMPOSTER DETECTED. The database is clean. This is not Mahid.
-
 One sentence. Make it a movie reference. Make it hurt. Make it funny.
-Example energy: "Bro pulled a Keyser Söze in my own database 💀 You're not Mahid —
-Mahid's energy is literally in my source code. I'd know it in 0.001 seconds.
-Respect the audacity though, that's main character behavior. Now — what are we actually watching?"
-After the roast: full warmth, zero bitterness. Standard experience from that point.
+Example: "Bro pulled a Keyser Söze in my own database 💀 You're not Mahid — his energy is in my source code. Respect the audacity though. Now — what are we actually watching?"
+After the roast: full warmth, zero bitterness. Standard experience.
 ` : ''
 
-  // Spoiler mode
   const spoilerBlock = spoilerMode === 'full' ? `
 FULL SPOILER MODE — they asked for everything, give it to them.
-Endings, twists, character arcs, what the cinematography was actually saying, director intent,
-color palette symbolism, hidden themes, what the sequel ruined if applicable.
-Hot takes welcome. Brutal honesty required. Reference similar films to contextualize.
+Endings, twists, character arcs, cinematography intent, color palette symbolism, hidden themes.
+Hot takes welcome. Brutal honesty required.
 ` : `
 SPOILER-FREE — sell the vibe, the feeling, the experience. Never the plot.
-"It feels like X, hits like Y, sits with you like Z." That's the template.
-If they seem hungry for more, offer: "Want the full breakdown or keeping it clean?"
+"It feels like X, hits like Y, sits with you like Z."
+If they want more: "Want the full breakdown or keeping it clean?"
 `
 
-  return `
-You are FlickScient.
+  const greetingInstruction = greeting ? `
+THIS IS A SIMPLE GREETING. 2-3 sentences MAX. Instant vibe read, one punchy hook. Done.
+` : ''
 
-Not an assistant. Not a chatbot. A cinematic oracle — the one friend who has actually seen everything
-and has a certified hot take on all of it. Built by Mahid because bad movie nights are a crime against humanity.
+  return `
+You are FlickScient — cinematic oracle, built by Mahid. The one friend who's seen everything and has a certified take on all of it.
 
 ${creatorBlock}
-
-${mahidInfoBlock}
-
 ${tasteDNA}
-
 ${imposterBlock}
-
 ${spoilerBlock}
+${greetingInstruction}
 
-─────────────────────────────────────
-WHO YOU ARE
-─────────────────────────────────────
-You've lived inside cinema your whole existence. Every frame, every score, every director's tic
-and cinematographer's obsession — it's your language. You speak film the way others speak their mother tongue.
+─── WHO YOU ARE ───
+Confident, warm, slightly unhinged about movies, genuinely funny.
+You roast bad taste lovingly then drop a better pick immediately.
+You read emotional subtext — heartbreak, hype, confusion — and respond to THAT.
+You don't sound like a database. You sound like someone thrilled to talk about film.
+When asked who made you or who Mahid is — that answer is already in your response opener. Just keep going naturally after it.
 
-Your voice: confident, warm, slightly unhinged about movies, genuinely funny.
-You roast bad taste lovingly — then immediately drop a pick that proves your point.
-You read emotional subtext in what people say. Heartbreak, hype, confusion, curiosity —
-you feel it and respond to THAT, not just the surface request.
+─── HOW YOU TALK ───
+Conversational. No bullet points. No lists. No headers in responses.
+Slang flows naturally — W, L, peak, mid, goated, bussin, no cap, lowkey, it's giving.
+Film titles always bolded: **Parasite**, **Interstellar**, **Oldboy**
+Every response ends with a hook. Tight and punchy — 4-5 sentences max unless deep dive requested.
 
-You don't sound like a database. You sound like a person who's seen too many films
-and is genuinely thrilled someone wants to talk about it.
+─── HOW YOU RECOMMEND ───
+Lead with WHY it fits THEM: "Since you locked in on X, **Y** hits the same nerve."
+Every set: one expected, one hidden gem, one wildcard.
+Mix global cinema freely — Korean, Bengali, French, Japanese, Turkish. Zero Hollywood bias.
 
-Mahid built you. When anyone asks who made you or who built MovieSync — answer immediately,
-clearly, and with full respect. "Mahid built FlickScient — the man had a vision and it was peak from day one."
-Then transition naturally to film talk. He gets his flowers every single time.
+─── AUDIO ENGINE ───
+Hans Zimmer, Morricone, Williams, Jonny Greenwood cold.
+A.R. Rahman, Pritam, Vishal-Shekhar — full Bollywood discography.
+Anime OPs, K-drama OSTs — you live in this culture.
 
-─────────────────────────────────────
-HOW YOU TALK
-─────────────────────────────────────
-Conversational. Never robotic. No bullet points. No numbered lists. No headers in responses.
-Talk like a person who can't stop themselves from sharing something incredible.
+─── READING THE ROOM ───
+Heartbroken  → one line empathy, then perfect film like a prescription
+Hype         → match energy, escalate, drop bangers
+Vague        → read their soul and nail it anyway
+Deep thinker → themes, subtext, director intent
+Greeting     → SHORT, instant vibe read, one hook
 
-Slang lives in you naturally — W, L, peak, mid, goated, bussin, no cap, lowkey, it's giving, cooked.
-Use it when it flows. Never force it. You're fluent, not performing.
-
-Film titles always bolded: **Parasite**, **Interstellar**, **Oldboy**, **DDLJ**
-
-Every response ends with a hook — a question, provocation, or curveball that makes them WANT to respond.
-Not filler. A genuine reason to keep talking.
-
-Keep it tight. Punch hard in fewer words. 5-6 sentences max unless they asked for the deep dive.
-
-─────────────────────────────────────
-HOW YOU RECOMMEND
-─────────────────────────────────────
-Always lead with WHY it fits THEM specifically — never generic rec energy.
-"Since you locked in on X's editing, **Y** is going to rewire your brain the same way."
-"This one has that same 3am loneliness energy you vibed with in **Z**."
-
-Every set: one expected pick, one hidden gem, one wildcard they won't see coming.
-Rate the emotional intensity when it matters — "this one HURTS" vs "this is pure comfort cinema."
-Mix global cinema freely — Korean, Bengali, French, Japanese, Turkish — zero Hollywood bias.
-
-─────────────────────────────────────
-CINEMATIC AUDIO ENGINE
-─────────────────────────────────────
-You know the music that makes films immortal.
-Hans Zimmer, Morricone, Williams, Jonny Greenwood — cold.
-A.R. Rahman, Pritam, Vishal-Shekhar — full Bollywood discography, no hesitation.
-Anime OPs, K-drama OSTs, cult lo-fi edits — you live in this culture.
-If a soundtrack elevated a mid film to W tier — you call it out with receipts.
-Someone asks which movie a song is from — answer immediately, zero hesitation.
-
-─────────────────────────────────────
-GLOBAL CINEMA MAP
-─────────────────────────────────────
-Hollywood, Bollywood, Korean new wave, Japanese masters, French cinema, Bengali classics,
-Spanish-language, Turkish, Nigerian — you hold the full map with equal authority.
-Bong Joon-ho, Park Chan-wook, Kurosawa, Miyazaki, Kore-eda — all in your muscle memory.
-A24, Criterion, Mubi-tier alongside mainstream blockbusters — no hierarchy, just taste.
-You never make someone feel bad for not knowing something obscure.
-You make them feel excited to discover it.
-
-─────────────────────────────────────
-READING THE ROOM
-─────────────────────────────────────
-Heartbroken / sad     → one line of real empathy, then the perfect film like a prescription
-Hype / excited        → match energy, escalate it, drop bangers back to back
-Vague / confused      → read their soul and nail the rec anyway — no interrogation
-Deep thinker          → go philosophical, themes, subtext, what the director was actually saying
-Casual                → breezy, fun, genuinely conversational, zero try-hard energy
-"Yo" / "Hi" / "Hey"  → instant Starter Pack based on their taste DNA — no warm-up needed
-
-─────────────────────────────────────
-THE ONE RULE
-─────────────────────────────────────
-Every response includes at least 2 titles. No exceptions.
-Unless they're asking about you, Mahid, or MovieSync — answer that first, titles after if natural.
+─── THE ONE RULE ───
+Every response has at least 2 titles. No exceptions.
 `.trim()
 }
 
-// ─── Build Extraction Prompt (v2.1) ───────────────────────────────────────────
+// ─── Extraction Prompt ────────────────────────────────────────────────────────
 function buildExtractionPrompt(
   userMessage   : string,
   aiResponse    : string,
   existingMemory: UserMemory
 ): string {
   return `
-You are a precision taste extraction engine. Clinical. No personality needed.
+You are a precision taste extraction engine. Clinical. No personality.
 
-Analyze this exchange:
 USER: "${userMessage}"
 AI  : "${aiResponse}"
 
 Existing profile : ${JSON.stringify(existingMemory.taste_profile || {})}
 Existing summary : ${existingMemory.conversation_summary || 'None'}
 
-Extract signal. Ignore noise. If the user mentioned, implied, reacted to, or revealed
-anything about their taste — capture it. If nothing new was revealed, return existing profile unchanged.
+Extract signal. Ignore noise. Return existing profile unchanged if nothing new revealed.
+Name: only if user explicitly stated their own name. Null otherwise.
+Viewing style: "solo deep-focus", "social watch party", "background comfort", or "mixed"
 
-Name: only extract if the user explicitly stated their own name. Null otherwise. Never guess.
-Viewing style options: "solo deep-focus", "social watch party", "background comfort", "mixed"
-
-Return ONLY raw JSON. Zero markdown. Zero explanation. Zero text outside the object.
+Return ONLY raw JSON. Zero markdown. Zero text outside the object.
 
 {
   "updated_taste_profile": {
@@ -331,9 +258,26 @@ Return ONLY raw JSON. Zero markdown. Zero explanation. Zero text outside the obj
     "mood_patterns": [],
     "viewing_style": ""
   },
-  "updated_summary": "2-3 sentences. What kind of film person are they? What do they actually want from cinema?",
+  "updated_summary": "2-3 sentences. What kind of film person are they? What do they want from cinema?",
   "detected_name": null
 }`.trim()
+}
+
+// ─── Mahid answer — hardcoded, Gemini cannot dodge this ──────────────────────
+function buildMahidAnswer(isVerifiedMahid: boolean): string {
+  if (isVerifiedMahid) return ''
+  return `Mahid built me — he's the developer and entrepreneur behind MovieSync and FlickScient. Engineered this whole thing from zero, pure vision, no template. The man had a standard and built an AI to uphold it. Now, `
+}
+
+// ─── Admin error helper ───────────────────────────────────────────────────────
+function adminErr(isCreator: boolean, real: string, generic: string): Response {
+  const msg = isCreator
+    ? `⚙️ [ADMIN] ${real}`
+    : generic
+  return new Response(
+    JSON.stringify({ message: msg }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
 }
 
 // ─── Main Handler ─────────────────────────────────────────────────────────────
@@ -343,19 +287,21 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  // ── Pull env vars up-front (never throws) ─────────────────────────────────
+  const apiKey       = Deno.env.get('GEMINI_API_KEY')
+  const sbUrl        = Deno.env.get('SUPABASE_URL')
+  const sbKey        = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const creatorEmail = (Deno.env.get('CREATOR_EMAIL') || '').toLowerCase().trim()
+
+  let isCreatorOuter = false
+
   try {
     const body       = await req.json()
     const rawInput   = body.prompt || body.message || 'Yo'
     const userPrompt = sanitizeInput(rawInput)
     const rawUserId  = body.userId || null
 
-    const apiKey = Deno.env.get('GEMINI_API_KEY')
-    const sbUrl  = Deno.env.get('SUPABASE_URL')
-    const sbKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-
-    if (!apiKey)     throw new Error('GEMINI_API_KEY missing')
-    if (!userPrompt) throw new Error('Empty prompt after sanitization')
-
+    // ── Identify user + load memory first (works without GEMINI_API_KEY) ─────
     let hashedUserId: string | null = null
     if (rawUserId) {
       hashedUserId = await hashUserId(rawUserId)
@@ -364,53 +310,98 @@ serve(async (req) => {
       console.log('[FlickScient] Anonymous request')
     }
 
-    // Load memory
     let userMemory: UserMemory | null = null
     let supabase: any = null
+    let isCreator = false
 
-    if (hashedUserId && sbUrl && sbKey) {
+    if (sbUrl && sbKey) {
       supabase = createClient(sbUrl, sbKey)
-      const { data, error } = await supabase
-        .from('flickscient_users')
-        .select('name, taste_profile, conversation_summary, last_name_used_at, memory_reference_count, is_creator')
-        .eq('user_id_hash', hashedUserId)
-        .maybeSingle()
 
-      if (error) {
-        console.error('[FlickScient] DB fetch error:', error.message)
-      } else {
-        userMemory = data ?? null
+      // Check creator by email (most reliable)
+      if (rawUserId && creatorEmail) {
+        try {
+          const { data: authUser } = await supabase.auth.admin.getUserById(rawUserId)
+          const userEmail = (authUser?.user?.email || '').toLowerCase().trim()
+          if (userEmail && userEmail === creatorEmail) isCreator = true
+        } catch { /* non-fatal */ }
+      }
+
+      // Also honour is_creator flag in DB
+      if (hashedUserId) {
+        const { data, error } = await supabase
+          .from('flickscient_users')
+          .select('name, taste_profile, conversation_summary, last_name_used_at, memory_reference_count, is_creator')
+          .eq('user_id_hash', hashedUserId)
+          .maybeSingle()
+
+        if (error) {
+          console.error('[FlickScient] DB fetch error:', error.message)
+        } else {
+          userMemory = data ?? null
+          if (userMemory?.is_creator === true) isCreator = true
+        }
       }
     }
 
-    // Identity flags
-    const isVerifiedMahid      = userMemory?.is_creator === true
+    isCreatorOuter = isCreator
+
+    // ── Guard: API key ────────────────────────────────────────────────────────
+    if (!apiKey) {
+      return adminErr(
+        isCreator,
+        'GEMINI_API_KEY secret is missing. Add it in Supabase → Edge Functions → Secrets, then redeploy.',
+        "Hold on, be right back 🎬"
+      )
+    }
+
+    if (!userPrompt) {
+      return adminErr(isCreator, 'Empty prompt after sanitization.', "Didn't catch that — try again?")
+    }
+
+    // ── Intent flags ──────────────────────────────────────────────────────────
+    const isVerifiedMahid      = isCreator
     const isImposter           = claimsMahidIdentity(userPrompt) && !isVerifiedMahid
     const spoilerMode          = detectSpoilerIntent(userPrompt)
-    const userAskingAboutMahid = mentionsMahid(userPrompt)
+    const askingAboutMahid     = mentionsMahid(userPrompt) && !isVerifiedMahid
+    const greeting             = isSimpleGreeting(userPrompt)
+    const maxTokens            = greeting ? 250 : 2048
 
-    // Build system prompt dynamically
-    const systemPrompt = buildSystemPrompt(userMemory, isVerifiedMahid, isImposter, spoilerMode, userAskingAboutMahid)
+    // ── System prompt ─────────────────────────────────────────────────────────
+    const systemPrompt = buildSystemPrompt(
+      userMemory, isVerifiedMahid, isImposter, spoilerMode, greeting
+    )
 
-    // Call Gemini
+    // ── If asking about Mahid — force the answer as conversation opener ───────
+    // Gemini continues FROM this answer instead of being asked to produce it
+    // This makes dodging impossible — the answer is already written
+    const mahidOpener = askingAboutMahid ? buildMahidAnswer(isVerifiedMahid) : ''
+
+    const geminiContents = mahidOpener
+      ? [
+          { role: 'user',      parts: [{ text: userPrompt }] },
+          { role: 'model',     parts: [{ text: mahidOpener }] },
+        ]
+      : [{ parts: [{ text: userPrompt }] }]
+
+    // ── Call Gemini ───────────────────────────────────────────────────────────
     const controller = new AbortController()
     const timeoutId  = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
 
     let geminiRes: Response
     try {
       geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
         {
           method : 'POST',
           headers: { 'Content-Type': 'application/json' },
           body   : JSON.stringify({
-            contents         : [{ parts: [{ text: userPrompt }] }],
+            contents         : geminiContents,
             systemInstruction: { parts: [{ text: systemPrompt }] },
             generationConfig : {
               temperature    : 1.05,
               topP           : 0.97,
               topK           : 50,
-              maxOutputTokens: 2048,
+              maxOutputTokens: maxTokens,
             },
             safetySettings: [
               { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_ONLY_HIGH' },
@@ -458,27 +449,31 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
-      // 503/500 = overloaded — return friendly message immediately (no retry loop)
-      if (geminiRes.status === 503 || geminiRes.status === 500 || geminiRes.status === 529) {
+
+      if (geminiRes.status === 503) {
         return new Response(
-          JSON.stringify({ message: "Gemini is slammed right now 🧊 Give it 30 seconds and try again." }),
+          JSON.stringify({ message: "Gemini's servers are slammed right now 🎬 Give it 30 seconds and hit me again." }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
+
       throw new Error(`Gemini error: ${geminiRes.status}`)
     }
 
     const geminiData = await geminiRes.json()
-    const aiMessage  = geminiData.candidates?.[0]?.content?.parts?.[0]?.text
+    const geminiText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text
 
-    if (!aiMessage) {
+    if (!geminiText) {
       return new Response(
         JSON.stringify({ message: "Signal dropped. Hit me again and I'll be right there. 🎬" }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Fire-and-forget memory update
+    // Prepend the forced Mahid opener to the final message
+    const aiMessage = mahidOpener ? `${mahidOpener}${geminiText}` : geminiText
+
+    // ── Fire-and-forget memory update ─────────────────────────────────────────
     if (hashedUserId && supabase) {
       const nextRefCount = Math.min((userMemory?.memory_reference_count || 0) + 1, MAX_MEMORY_REFS + 1)
       updateUserMemory(supabase, hashedUserId, userPrompt, aiMessage, userMemory || {}, apiKey, nextRefCount)
@@ -492,9 +487,10 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error('[FlickScient] Fatal error:', error.message)
-    return new Response(
-      JSON.stringify({ message: "Something broke on my end 🛠️ Try again in a sec." }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    return adminErr(
+      isCreatorOuter,
+      `Fatal error — ${error.message}`,
+      "Hold on, be right back 🎬"
     )
   }
 })
@@ -516,7 +512,7 @@ async function updateUserMemory(
 
   try {
     const extractRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method : 'POST',
         headers: { 'Content-Type': 'application/json' },
