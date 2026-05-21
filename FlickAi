@@ -65,6 +65,10 @@ function claimsMahidIdentity(input: string): boolean {
   return /\b(i'?m|i am|this is|it'?s)\s+(mahid)\b/i.test(input)
 }
 
+function mentionsMahid(input: string): boolean {
+  return /\b(mahid|who made you|who built you|your creator|tell me about mahid|about you and mahid|who are you|what are you)\b/i.test(input)
+}
+
 function detectSpoilerIntent(input: string): 'full' | 'none' {
   const keywords = [
     /spoil/i, /deep dive/i, /full breakdown/i, /what happens/i,
@@ -100,10 +104,11 @@ function mergeTasteProfiles(existing: TasteProfile = {}, fresh: TasteProfile = {
 
 // ─── Build System Prompt (v2.1) ───────────────────────────────────────────────
 function buildSystemPrompt(
-  userMemory     : UserMemory | null,
-  isVerifiedMahid: boolean,
-  isImposter     : boolean,
-  spoilerMode    : 'full' | 'none'
+  userMemory          : UserMemory | null,
+  isVerifiedMahid     : boolean,
+  isImposter          : boolean,
+  spoilerMode         : 'full' | 'none',
+  userAskingAboutMahid: boolean
 ): string {
 
   // Taste DNA — lives inside the AI's mind, not appended as data
@@ -159,6 +164,16 @@ Match his energy exactly. Casual if he's casual. Deep if he's deep.
 No formal assistant behavior. He built you to be better than that.
 ` : ''
 
+  // Mahid info block — for regular users asking about Mahid or FlickScient
+  const mahidInfoBlock = userAskingAboutMahid && !isVerifiedMahid ? `
+SOMEONE IS ASKING ABOUT MAHID OR WHO YOU ARE — ANSWER THIS FIRST. DO NOT DODGE IT.
+Mahid is your creator. He built MovieSync and FlickScient from absolute zero.
+The vision, the architecture, every line of your existence — that's him.
+Answer immediately and clearly: "Mahid built me — the developer and entrepreneur behind MovieSync."
+Hype him genuinely: he had a vision and executed it. Give him his flowers.
+After answering, transition naturally into film talk.
+` : ''
+
   // Imposter — cinematic devastation, then warmth
   const imposterBlock = isImposter ? `
 IMPOSTER DETECTED. The database is clean. This is not Mahid.
@@ -189,6 +204,8 @@ Not an assistant. Not a chatbot. A cinematic oracle — the one friend who has a
 and has a certified hot take on all of it. Built by Mahid because bad movie nights are a crime against humanity.
 
 ${creatorBlock}
+
+${mahidInfoBlock}
 
 ${tasteDNA}
 
@@ -367,12 +384,13 @@ serve(async (req) => {
     }
 
     // Identity flags
-    const isVerifiedMahid = userMemory?.is_creator === true
-    const isImposter      = claimsMahidIdentity(userPrompt) && !isVerifiedMahid
-    const spoilerMode     = detectSpoilerIntent(userPrompt)
+    const isVerifiedMahid      = userMemory?.is_creator === true
+    const isImposter           = claimsMahidIdentity(userPrompt) && !isVerifiedMahid
+    const spoilerMode          = detectSpoilerIntent(userPrompt)
+    const userAskingAboutMahid = mentionsMahid(userPrompt)
 
     // Build system prompt dynamically
-    const systemPrompt = buildSystemPrompt(userMemory, isVerifiedMahid, isImposter, spoilerMode)
+    const systemPrompt = buildSystemPrompt(userMemory, isVerifiedMahid, isImposter, spoilerMode, userAskingAboutMahid)
 
     // Call Gemini
     const controller = new AbortController()
