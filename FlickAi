@@ -399,7 +399,7 @@ serve(async (req) => {
     let geminiRes: Response
     try {
       geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
         {
           method : 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -411,7 +411,6 @@ serve(async (req) => {
               topP           : 0.97,
               topK           : 50,
               maxOutputTokens: 2048,
-              thinkingConfig : { thinkingBudget: 0 },
             },
             safetySettings: [
               { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_ONLY_HIGH' },
@@ -456,6 +455,13 @@ serve(async (req) => {
         } catch { /* keep default */ }
         return new Response(
           JSON.stringify({ message: msg }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      // 503/500 = overloaded — return friendly message immediately (no retry loop)
+      if (geminiRes.status === 503 || geminiRes.status === 500 || geminiRes.status === 529) {
+        return new Response(
+          JSON.stringify({ message: "Gemini is slammed right now 🧊 Give it 30 seconds and try again." }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
@@ -510,7 +516,7 @@ async function updateUserMemory(
 
   try {
     const extractRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
       {
         method : 'POST',
         headers: { 'Content-Type': 'application/json' },
