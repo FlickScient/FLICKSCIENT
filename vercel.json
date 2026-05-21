@@ -1,5 +1,5 @@
 {
-  "buildCommand": "pnpm install --no-frozen-lockfile --ignore-workspace && pnpm run build",
+  "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
   "rewrites": [
     {
