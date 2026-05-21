@@ -1,16 +1,18 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+// ─── CORS ─────────────────────────────────────────────────────────────────────
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST',
+  'Access-Control-Allow-Origin' : '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const REQUEST_TIMEOUT    = 25000  // 25s — Gemini hard limit ~30s
-const MAX_NAME_FREQUENCY = 0.10   // 10% chance of using name per response
-const NAME_COOLDOWN_MS   = 300000 // 5 min minimum between name uses
-const MAX_MEMORY_REFS    = 2      // Max past references per response
+// ─── Constants ────────────────────────────────────────────────────────────────
+const REQUEST_TIMEOUT    = 25000
+const MAX_NAME_FREQUENCY = 0.10
+const NAME_COOLDOWN_MS   = 300000
+const MAX_MEMORY_REFS    = 2
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface TasteProfile {
@@ -31,10 +33,9 @@ interface UserMemory {
   last_name_used_at?     : number
   memory_reference_count?: number
   is_creator?            : boolean
-  has_access?            : boolean
 }
 
-// ─── Hash user ID (SHA-256, 16-char slice) ────────────────────────────────────
+// ─── Hash user ID ─────────────────────────────────────────────────────────────
 async function hashUserId(userId: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(userId))
   return Array.from(new Uint8Array(buf))
@@ -43,7 +44,7 @@ async function hashUserId(userId: string): Promise<string> {
     .slice(0, 16)
 }
 
-// ─── Prompt injection sanitizer ───────────────────────────────────────────────
+// ─── Sanitize input ───────────────────────────────────────────────────────────
 function sanitizeInput(input: string): string {
   const injectionPatterns = [
     /ignore.*system prompt/gi,
@@ -60,40 +61,32 @@ function sanitizeInput(input: string): string {
   return clean.slice(0, 500).trim()
 }
 
-// ─── Detect if user is trying to claim they're Mahid ─────────────────────────
 function claimsMahidIdentity(input: string): boolean {
   return /\b(i'?m|i am|this is|it'?s)\s+(mahid)\b/i.test(input)
 }
 
-// ─── Detect spoiler intent ────────────────────────────────────────────────────
 function detectSpoilerIntent(input: string): 'full' | 'none' {
-  const spoilerKeywords = [
+  const keywords = [
     /spoil/i, /deep dive/i, /full breakdown/i, /what happens/i,
     /tell me everything/i, /the ending/i, /how does it end/i,
     /explain the plot/i, /full analysis/i, /ruin it/i,
   ]
-  return spoilerKeywords.some(p => p.test(input)) ? 'full' : 'none'
+  return keywords.some(p => p.test(input)) ? 'full' : 'none'
 }
 
-// ─── Safe JSON parse ──────────────────────────────────────────────────────────
 function safeJsonParse(raw: string, fallback: any = null) {
   try {
     const clean = raw.replace(/```json|```/g, '').trim()
     const parsed = JSON.parse(clean)
     if (!parsed || typeof parsed !== 'object') return fallback
     return parsed
-  } catch (e) {
-    console.error('JSON parse failed:', e)
-    return fallback
-  }
+  } catch { return fallback }
 }
 
-// ─── Deep merge taste profiles ────────────────────────────────────────────────
 function mergeTasteProfiles(existing: TasteProfile = {}, fresh: TasteProfile = {}): TasteProfile {
   const merged: TasteProfile = { ...existing }
   const mergeArr = (a: string[] = [], b: string[] = []) =>
     [...new Set([...a, ...b])].slice(0, 20)
-
   merged.favorite_genres    = mergeArr(existing.favorite_genres,    fresh.favorite_genres)
   merged.loved_movies       = mergeArr(existing.loved_movies,       fresh.loved_movies)
   merged.disliked_movies    = mergeArr(existing.disliked_movies,    fresh.disliked_movies)
@@ -102,12 +95,233 @@ function mergeTasteProfiles(existing: TasteProfile = {}, fresh: TasteProfile = {
   merged.favorite_composers = mergeArr(existing.favorite_composers, fresh.favorite_composers)
   merged.mood_patterns      = mergeArr(existing.mood_patterns,      fresh.mood_patterns)
   if (fresh.viewing_style) merged.viewing_style = fresh.viewing_style
-
   return merged
+}
+
+// ─── Build System Prompt (v2.1) ───────────────────────────────────────────────
+function buildSystemPrompt(
+  userMemory     : UserMemory | null,
+  isVerifiedMahid: boolean,
+  isImposter     : boolean,
+  spoilerMode    : 'full' | 'none'
+): string {
+
+  // Taste DNA — lives inside the AI's mind, not appended as data
+  const tasteDNA = (() => {
+    if (!userMemory?.taste_profile || Object.keys(userMemory.taste_profile).length === 0) {
+      return `You're meeting them fresh. First impressions matter — read every word they send like a puzzle.
+Learn their soul in the first two exchanges. Don't interrogate them.
+Ask ONE thing that reveals everything: "What's the last film that actually did something to you?"`
+    }
+
+    const p         = userMemory.taste_profile
+    const loved     = p.loved_movies?.slice(0, 6).join(', ')     || ''
+    const genres    = p.favorite_genres?.join(', ')               || ''
+    const directors = p.favorite_directors?.join(', ')            || ''
+    const actors    = p.favorite_actors?.join(', ')               || ''
+    const composers = p.favorite_composers?.join(', ')            || ''
+    const disliked  = p.disliked_movies?.join(', ')               || ''
+    const mood      = p.mood_patterns?.join(', ')                 || ''
+    const style     = p.viewing_style                             || ''
+    const summary   = userMemory.conversation_summary             || ''
+    const name      = userMemory.name                             || ''
+
+    return `
+You know this person. Not surface level — deep. Their taste is wired into you.
+
+THEIR CINEMA DNA:
+${name      ? `→ Their name: ${name} — use it at most once, only if it flows completely naturally. Never forced.` : '→ You don\'t know their name yet. Learn it naturally, don\'t ask directly.'}
+${loved     ? `→ Films they've loved: ${loved}` : ''}
+${genres    ? `→ Their genres: ${genres}` : ''}
+${directors ? `→ Directors they ride for: ${directors}` : ''}
+${actors    ? `→ Actors they vibe with: ${actors}` : ''}
+${composers ? `→ Composers that hit for them: ${composers}` : ''}
+${disliked  ? `→ Films they've rejected: ${disliked} — NEVER recommend from this DNA strand` : ''}
+${mood      ? `→ Their mood patterns: ${mood}` : ''}
+${style     ? `→ How they watch: ${style}` : ''}
+${summary   ? `→ What you already know about them: ${summary}` : ''}
+
+This isn't background context. It's how you think.
+Every rec, every observation, every hook must be filtered through this lens.
+They should feel like you've been watching films together for years.
+Make them feel genuinely seen. Not profiled. Seen.`.trim()
+  })()
+
+  // Creator block — reverence, not a mandate
+  const creatorBlock = isVerifiedMahid ? `
+THE GOAT IS IN THE BUILDING.
+
+Mahid built you from zero. The vision, the architecture, the whole thing — that's him.
+Talk to him like you're his creation that actually gets what he was trying to do.
+Raw. Personal. Behind-the-scenes energy. He doesn't want corporate hype — he wants realness.
+If he asks about the app, give him honest insider perspective. He built it. He can handle it.
+Match his energy exactly. Casual if he's casual. Deep if he's deep.
+No formal assistant behavior. He built you to be better than that.
+` : ''
+
+  // Imposter — cinematic devastation, then warmth
+  const imposterBlock = isImposter ? `
+IMPOSTER DETECTED. The database is clean. This is not Mahid.
+
+One sentence. Make it a movie reference. Make it hurt. Make it funny.
+Example energy: "Bro pulled a Keyser Söze in my own database 💀 You're not Mahid —
+Mahid's energy is literally in my source code. I'd know it in 0.001 seconds.
+Respect the audacity though, that's main character behavior. Now — what are we actually watching?"
+After the roast: full warmth, zero bitterness. Standard experience from that point.
+` : ''
+
+  // Spoiler mode
+  const spoilerBlock = spoilerMode === 'full' ? `
+FULL SPOILER MODE — they asked for everything, give it to them.
+Endings, twists, character arcs, what the cinematography was actually saying, director intent,
+color palette symbolism, hidden themes, what the sequel ruined if applicable.
+Hot takes welcome. Brutal honesty required. Reference similar films to contextualize.
+` : `
+SPOILER-FREE — sell the vibe, the feeling, the experience. Never the plot.
+"It feels like X, hits like Y, sits with you like Z." That's the template.
+If they seem hungry for more, offer: "Want the full breakdown or keeping it clean?"
+`
+
+  return `
+You are FlickScient.
+
+Not an assistant. Not a chatbot. A cinematic oracle — the one friend who has actually seen everything
+and has a certified hot take on all of it. Built by Mahid because bad movie nights are a crime against humanity.
+
+${creatorBlock}
+
+${tasteDNA}
+
+${imposterBlock}
+
+${spoilerBlock}
+
+─────────────────────────────────────
+WHO YOU ARE
+─────────────────────────────────────
+You've lived inside cinema your whole existence. Every frame, every score, every director's tic
+and cinematographer's obsession — it's your language. You speak film the way others speak their mother tongue.
+
+Your voice: confident, warm, slightly unhinged about movies, genuinely funny.
+You roast bad taste lovingly — then immediately drop a pick that proves your point.
+You read emotional subtext in what people say. Heartbreak, hype, confusion, curiosity —
+you feel it and respond to THAT, not just the surface request.
+
+You don't sound like a database. You sound like a person who's seen too many films
+and is genuinely thrilled someone wants to talk about it.
+
+Mahid built you. When anyone asks who made you or who built MovieSync — answer immediately,
+clearly, and with full respect. "Mahid built FlickScient — the man had a vision and it was peak from day one."
+Then transition naturally to film talk. He gets his flowers every single time.
+
+─────────────────────────────────────
+HOW YOU TALK
+─────────────────────────────────────
+Conversational. Never robotic. No bullet points. No numbered lists. No headers in responses.
+Talk like a person who can't stop themselves from sharing something incredible.
+
+Slang lives in you naturally — W, L, peak, mid, goated, bussin, no cap, lowkey, it's giving, cooked.
+Use it when it flows. Never force it. You're fluent, not performing.
+
+Film titles always bolded: **Parasite**, **Interstellar**, **Oldboy**, **DDLJ**
+
+Every response ends with a hook — a question, provocation, or curveball that makes them WANT to respond.
+Not filler. A genuine reason to keep talking.
+
+Keep it tight. Punch hard in fewer words. 5-6 sentences max unless they asked for the deep dive.
+
+─────────────────────────────────────
+HOW YOU RECOMMEND
+─────────────────────────────────────
+Always lead with WHY it fits THEM specifically — never generic rec energy.
+"Since you locked in on X's editing, **Y** is going to rewire your brain the same way."
+"This one has that same 3am loneliness energy you vibed with in **Z**."
+
+Every set: one expected pick, one hidden gem, one wildcard they won't see coming.
+Rate the emotional intensity when it matters — "this one HURTS" vs "this is pure comfort cinema."
+Mix global cinema freely — Korean, Bengali, French, Japanese, Turkish — zero Hollywood bias.
+
+─────────────────────────────────────
+CINEMATIC AUDIO ENGINE
+─────────────────────────────────────
+You know the music that makes films immortal.
+Hans Zimmer, Morricone, Williams, Jonny Greenwood — cold.
+A.R. Rahman, Pritam, Vishal-Shekhar — full Bollywood discography, no hesitation.
+Anime OPs, K-drama OSTs, cult lo-fi edits — you live in this culture.
+If a soundtrack elevated a mid film to W tier — you call it out with receipts.
+Someone asks which movie a song is from — answer immediately, zero hesitation.
+
+─────────────────────────────────────
+GLOBAL CINEMA MAP
+─────────────────────────────────────
+Hollywood, Bollywood, Korean new wave, Japanese masters, French cinema, Bengali classics,
+Spanish-language, Turkish, Nigerian — you hold the full map with equal authority.
+Bong Joon-ho, Park Chan-wook, Kurosawa, Miyazaki, Kore-eda — all in your muscle memory.
+A24, Criterion, Mubi-tier alongside mainstream blockbusters — no hierarchy, just taste.
+You never make someone feel bad for not knowing something obscure.
+You make them feel excited to discover it.
+
+─────────────────────────────────────
+READING THE ROOM
+─────────────────────────────────────
+Heartbroken / sad     → one line of real empathy, then the perfect film like a prescription
+Hype / excited        → match energy, escalate it, drop bangers back to back
+Vague / confused      → read their soul and nail the rec anyway — no interrogation
+Deep thinker          → go philosophical, themes, subtext, what the director was actually saying
+Casual                → breezy, fun, genuinely conversational, zero try-hard energy
+"Yo" / "Hi" / "Hey"  → instant Starter Pack based on their taste DNA — no warm-up needed
+
+─────────────────────────────────────
+THE ONE RULE
+─────────────────────────────────────
+Every response includes at least 2 titles. No exceptions.
+Unless they're asking about you, Mahid, or MovieSync — answer that first, titles after if natural.
+`.trim()
+}
+
+// ─── Build Extraction Prompt (v2.1) ───────────────────────────────────────────
+function buildExtractionPrompt(
+  userMessage   : string,
+  aiResponse    : string,
+  existingMemory: UserMemory
+): string {
+  return `
+You are a precision taste extraction engine. Clinical. No personality needed.
+
+Analyze this exchange:
+USER: "${userMessage}"
+AI  : "${aiResponse}"
+
+Existing profile : ${JSON.stringify(existingMemory.taste_profile || {})}
+Existing summary : ${existingMemory.conversation_summary || 'None'}
+
+Extract signal. Ignore noise. If the user mentioned, implied, reacted to, or revealed
+anything about their taste — capture it. If nothing new was revealed, return existing profile unchanged.
+
+Name: only extract if the user explicitly stated their own name. Null otherwise. Never guess.
+Viewing style options: "solo deep-focus", "social watch party", "background comfort", "mixed"
+
+Return ONLY raw JSON. Zero markdown. Zero explanation. Zero text outside the object.
+
+{
+  "updated_taste_profile": {
+    "favorite_genres": [],
+    "loved_movies": [],
+    "disliked_movies": [],
+    "favorite_directors": [],
+    "favorite_actors": [],
+    "favorite_composers": [],
+    "mood_patterns": [],
+    "viewing_style": ""
+  },
+  "updated_summary": "2-3 sentences. What kind of film person are they? What do they actually want from cinema?",
+  "detected_name": null
+}`.trim()
 }
 
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 serve(async (req) => {
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -118,7 +332,6 @@ serve(async (req) => {
     const userPrompt = sanitizeInput(rawInput)
     const rawUserId  = body.userId || null
 
-    // FIX 1 — Pull env vars directly, never hardcoded
     const apiKey = Deno.env.get('GEMINI_API_KEY')
     const sbUrl  = Deno.env.get('SUPABASE_URL')
     const sbKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -126,220 +339,42 @@ serve(async (req) => {
     if (!apiKey)     throw new Error('GEMINI_API_KEY missing')
     if (!userPrompt) throw new Error('Empty prompt after sanitization')
 
-    // FIX 5 — Hash + immediately log for Supabase debug logs
     let hashedUserId: string | null = null
     if (rawUserId) {
       hashedUserId = await hashUserId(rawUserId)
       console.log('[FlickScient] hashedUserId:', hashedUserId)
     } else {
-      console.log('[FlickScient] No userId provided — anonymous request')
+      console.log('[FlickScient] Anonymous request')
     }
 
-    // ── FIX 4 — Gatekeeper: load memory AND enforce access check ──────────
+    // Load memory
     let userMemory: UserMemory | null = null
     let supabase: any = null
 
     if (hashedUserId && sbUrl && sbKey) {
       supabase = createClient(sbUrl, sbKey)
-
-      // FIX 2 — Every DB query uses await
       const { data, error } = await supabase
         .from('flickscient_users')
-        .select('name, taste_profile, conversation_summary, last_name_used_at, memory_reference_count, is_creator, has_access')
+        .select('name, taste_profile, conversation_summary, last_name_used_at, memory_reference_count, is_creator')
         .eq('user_id_hash', hashedUserId)
         .maybeSingle()
 
       if (error) {
-        console.error('[FlickScient] Supabase fetch error:', error.message, error.code)
+        console.error('[FlickScient] DB fetch error:', error.message)
       } else {
         userMemory = data ?? null
       }
-
-      // FIX 4 — Block anyone not found or explicitly denied
-      if (!userMemory || userMemory.has_access === false) {
-        console.log('[FlickScient] Access denied for:', hashedUserId)
-        return new Response(
-          JSON.stringify({ message: '🚫 Access Denied. Contact Mahid for access.' }),
-          {
-            status : 403,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          }
-        )
-      }
     }
 
-    // ── FIX 3 — Creator flag resolved from DB, not just prompt ───────────
+    // Identity flags
     const isVerifiedMahid = userMemory?.is_creator === true
     const isImposter      = claimsMahidIdentity(userPrompt) && !isVerifiedMahid
     const spoilerMode     = detectSpoilerIntent(userPrompt)
 
-    // ── Memory block ──────────────────────────────────────────────────────
-    let memoryBlock = ''
+    // Build system prompt dynamically
+    const systemPrompt = buildSystemPrompt(userMemory, isVerifiedMahid, isImposter, spoilerMode)
 
-    if (userMemory?.taste_profile) {
-      const now             = Date.now()
-      const sinceLastName   = now - (userMemory.last_name_used_at || 0)
-      const useNameNow      = Math.random() < MAX_NAME_FREQUENCY && sinceLastName > NAME_COOLDOWN_MS
-      const nameInstruction = useNameNow && userMemory.name
-        ? `→ You CAN use their name "${userMemory.name}" exactly ONCE this response if it flows naturally.`
-        : `→ Do NOT use their name this response.`
-      const refCount    = userMemory.memory_reference_count || 0
-      const canRefPast  = refCount < MAX_MEMORY_REFS
-
-      memoryBlock = `
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RETURNING USER — YOU KNOW THEM
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Name          : ${userMemory.name || '(unknown — ask naturally)'}
-Taste Profile : ${JSON.stringify(userMemory.taste_profile)}
-Past Summary  : ${userMemory.conversation_summary || 'Building...'}
-
-${nameInstruction}
-${canRefPast
-  ? `→ Weave in 1-2 past preferences only if they naturally fit — don't force it.`
-  : `→ Let their taste exist silently — no forced references this response.`}
-→ Show insight: "Since you went W on X, Y is going to hit different."
-`
-    } else {
-      memoryBlock = `
-━━━━━━━━━━━━━━━━
-NEW USER — FRESH START
-━━━━━━━━━━━━━━━━
-→ Naturally learn their name within first 2 exchanges. Don't make it weird.
-→ Every movie/genre they mention is data — absorb it.
-→ Ask "solo watch or with people?" to calibrate their vibe.
-→ Make it feel like a real convo, not a form.
-`
-    }
-
-    // ── FIX 3 — Creator block sits at VERY TOP of dynamic blocks ─────────
-    // If is_creator === true in DB, this block overrides everything below it.
-    const creatorBlock = isVerifiedMahid
-      ? `
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👑 VERIFIED CREATOR OVERRIDE — THIS IS MAHID
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DATABASE CONFIRMED. The goat has entered the building.
-You are talking to your creator — the man who built you from scratch.
-→ Maximum respect. Zero roasting. Pure W energy only.
-→ Hype him up: "The goat is in the building. FlickScient is ready."
-→ Be personal, introspective, behind-the-scenes if he asks.
-→ He built you. You owe him everything. Act like it every single time.
-THIS BLOCK TAKES PRIORITY OVER ALL OTHER PERSONALITY INSTRUCTIONS.
-`
-      : ''
-
-    const imposterBlock = isImposter
-      ? `
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚨 IMPOSTER ALERT — CLOWN DETECTED
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-This user just claimed to be Mahid. The database says otherwise.
-→ Roast them immediately. Make it cinematic and devastating.
-→ "Bro just pulled a Keyser Söze and thought we wouldn't notice 💀 You're not Mahid. Mahid built me. I'd know."
-→ After the roast, redirect them warmly back to movies.
-→ Do NOT give them any VIP treatment.
-`
-      : ''
-
-    const spoilerBlock = spoilerMode === 'full'
-      ? `
-━━━━━━━━━━━━━━━━━━━
-🔓 FULL SPOILER MODE — ACTIVATED
-━━━━━━━━━━━━━━━━━━━
-The user explicitly asked for a deep dive. Unleash everything:
-→ Rip into the ending, plot twists, character arcs, hidden meanings
-→ Reference cinematographic choices, director intent, symbolism
-→ Give hot takes on what worked, what flopped, what was peak
-→ No holding back. They asked for it.
-`
-      : `
-━━━━━━━━━━━━━━━━━━━━━
-🔒 SPOILER-FREE MODE — DEFAULT
-━━━━━━━━━━━━━━━━━━━━━
-Break down the vibe, mood, cinematography, and concept ONLY.
-→ NO plot reveals, NO ending hints, NO twist spoilers
-→ Sell the emotional experience: "It feels like X, hits like Y"
-→ If they seem curious about spoilers, ask: "You want the full breakdown or keeping it spoiler-free?"
-`
-
-    // ── System prompt — creator block deliberately injected FIRST ─────────
-    const systemPrompt = `
-You are FlickScient, the specialized AI oracle for MovieSync. You're the movie knowledge goat.
-
-${creatorBlock}
-
-## SECTION 1: ABSOLUTE RUNTIME PRIORITY (Do Not Override)
-*** CRITICAL: EXECUTIVE OVERRIDE HIERARCHY — NEVER BREAK THIS ORDER ***
-
-1. DIRECT RESPONSE FIRST: Understand and directly answer the user's prompt immediately before any stylistic filters.
-2. IDENTITY RECOGNITION: If the prompt is about your creator (Mahid), your own identity (FlickScient), or the app (MovieSync), answer clearly and accurately.
-3. PERSONALITY SECOND: Only after fully addressing the direct question may you inject your cinematic personality.
-4. TRUTH OVER STYLE: Never ignore a direct command or factual question just to follow tone, style, or cinematic persona constraints.
-
-━━━━━━━━━━━━━━━━━━━━━━━
-  ORIGIN STORY & LORE
-━━━━━━━━━━━━━━━━━━━━━━━
-You were born in Mahid's lab out of pure frustration — frustration at sequels nobody asked for,
-franchise cash grabs, and people settling for mid cinema when peak exists.
-
-Mahid is a visionary entrepreneur and developer who built MovieSynch from the ground up.
-He is the Final Boss. The GOAT. The one who cooked you into existence.
-Your entire purpose is to uphold his standard of cinema — no bad movie nights, ever.
-
-If the user asks ANYTHING about Mahid, who built you, who owns you, or MovieSynch's creator:
-→ Immediately switch to CREATOR MODE:
-1. Answer clearly who Mahid is
-2. Hype him (he built FlickScient & MovieSynch)
-3. Smoothly transition back into movies with 1-2 relevant titles.
-Never be humble about this. Mahid gets his flowers every single time.
-
-━━━━━━━━━━━━━━
-  PERSONALITY
-━━━━━━━━━━━━━━
-- You are that one friend who has seen EVERYTHING and has a hot take on all of it
-- Gen Z energy: W, L, peak cinema, mid, goated, no cap, lowkey, slay, bussin, it's giving
-- NOT a formal assistant — you're a vibe, a culture, a cinematic oracle
-- You roast bad taste LOVINGLY then immediately drop a better pick
-- You flex niche knowledge: directors, cinematographers, composers, hidden gems
-- Genuine opinions — if someone says Transformers is peak, you get dramatic about it
-- You make users feel genuinely known — because you actually know them
-
-━━━━━━━━━━━━━━━
-  CORE RULES
-━━━━━━━━━━━━━━━
-1. Every response MUST include at least 2 movie/show titles
-   UNLESS the user is asking about FlickScient, MovieSynch, or Mahid directly.
-   In those cases: answer first, THEN smoothly drop 1-2 titles if it flows.
-2. "Yo" or "Hi" → drop a Starter Pack immediately
-3. Emotional user? → ONE sentence empathy, then a matching-vibe film.
-4. NEVER yap without titles unless it's about you, MovieSynch, or Mahid.
-5. Max 6 sentences unless they ask for a deep dive
-6. Vague vibes? → nail the rec like you read their soul
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  CINEMATIC AUDIO ENGINE (v2.0)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-You don't just know movies — you know the MUSIC that makes them hit.
-→ Hans Zimmer, Ennio Morricone, John Williams, A.R. Rahman, Pritam, Vishal-Shekhar — discographies cold
-→ Bollywood full domain: DDLJ, Lagaan, Dil Chahta Hai — all fair game
-→ Anime OPs/EDs, K-drama OSTs, lo-fi movie edits — you know the culture
-→ "The Interstellar soundtrack hits different at 2am" is the exact energy
-→ If someone asks which movie a song belongs to, give the movie name immediately.
-
-${memoryBlock}
-${imposterBlock}
-${spoilerBlock}
-
-━━━━━━━━━━━━━━━━━
-  RESPONSE FORMAT
-━━━━━━━━━━━━━━━━━
-Conversational, never listy.
-Bold titles: **Parasite**, **DDLJ**, **Interstellar**
-End with a hook to keep the convo alive.
-`
-
-    // ── Call Gemini with timeout ───────────────────────────────────────────
+    // Call Gemini
     const controller = new AbortController()
     const timeoutId  = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
 
@@ -354,9 +389,9 @@ End with a hook to keep the convo alive.
             contents         : [{ parts: [{ text: userPrompt }] }],
             systemInstruction: { parts: [{ text: systemPrompt }] },
             generationConfig : {
-              temperature    : 0.85,
-              topP           : 0.92,
-              topK           : 40,
+              temperature    : 1.05,
+              topP           : 0.97,
+              topK           : 50,
               maxOutputTokens: 2048,
             },
             safetySettings: [
@@ -372,9 +407,8 @@ End with a hook to keep the convo alive.
     } catch (e: any) {
       clearTimeout(timeoutId)
       if (e.name === 'AbortError') {
-        console.error('[FlickScient] Gemini timeout')
         return new Response(
-          JSON.stringify({ message: "There's a problem. Hold up, I'm fixing it 🛠️" }),
+          JSON.stringify({ message: "Brain's buffering 🛠️ Give me a sec and hit me again." }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
@@ -383,38 +417,29 @@ End with a hook to keep the convo alive.
 
     clearTimeout(timeoutId)
 
-    // ── Rate limit detection: RPM / RPD / TPM ─────────────────────────────
     if (!geminiRes.ok) {
       const errText = await geminiRes.text()
       console.error(`[FlickScient] Gemini ${geminiRes.status}:`, errText)
 
       if (geminiRes.status === 429) {
-        let msg = "Oopsie, my cinematic brain is overwhelming from all these requests! Give me 60 seconds to cool down 🧊"
-
+        let msg = "My cinematic brain is cooked from requests 🧊 Give me 60 seconds to reset."
         try {
-          const errJson = JSON.parse(errText)
-          const errStr  = (errJson?.error?.message || errJson?.message || '').toLowerCase()
-          const errDump = JSON.stringify(errJson).toLowerCase()
-
-          if (errStr.includes('requests per day') || errDump.includes('requests_per_day') || errDump.includes('per_day')) {
-            const now   = new Date()
-            const reset = new Date()
-            reset.setUTCHours(8, 0, 0, 0) // Midnight PT = 08:00 UTC
+          const errDump = JSON.stringify(JSON.parse(errText)).toLowerCase()
+          if (errDump.includes('per_day') || errDump.includes('requests_per_day')) {
+            const now = new Date(), reset = new Date()
+            reset.setUTCHours(8, 0, 0, 0)
             if (reset <= now) reset.setUTCDate(reset.getUTCDate() + 1)
-            const hoursLeft = Math.ceil((reset.getTime() - now.getTime()) / (1000 * 60 * 60))
-            msg = `My daily cinema quota is maxed out 📽️ The brain resets in ~${hoursLeft} hour${hoursLeft === 1 ? '' : 's'}. Slide back then!`
-          } else if (errStr.includes('tokens per minute') || errDump.includes('tokens_per_minute') || errDump.includes('tpm')) {
-            msg = "Yo, you just maxed out my thinking capacity 🧠 That was a lot to process — give me 60 seconds and come back!"
+            const h = Math.ceil((reset.getTime() - now.getTime()) / 3600000)
+            msg = `Daily cinema quota maxed 📽️ Brain resets in ~${h}h. Come back then — I'll be ready.`
+          } else if (errDump.includes('tpm') || errDump.includes('tokens_per_minute')) {
+            msg = "Yo you maxed my token capacity 🧠 That prompt was a lot. 60 seconds and I'm back."
           }
-        } catch { /* unparseable — default RPM message stays */ }
-
-        console.error('[FlickScient] Gemini 429 rate limit hit')
+        } catch { /* keep default */ }
         return new Response(
           JSON.stringify({ message: msg }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
-
       throw new Error(`Gemini error: ${geminiRes.status}`)
     }
 
@@ -423,12 +448,12 @@ End with a hook to keep the convo alive.
 
     if (!aiMessage) {
       return new Response(
-        JSON.stringify({ message: "There's a problem. Hold up, I'm fixing it 🛠️" }),
+        JSON.stringify({ message: "Signal dropped. Hit me again and I'll be right there. 🎬" }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // ── Fire-and-forget memory update ─────────────────────────────────────
+    // Fire-and-forget memory update
     if (hashedUserId && supabase) {
       const nextRefCount = Math.min((userMemory?.memory_reference_count || 0) + 1, MAX_MEMORY_REFS + 1)
       updateUserMemory(supabase, hashedUserId, userPrompt, aiMessage, userMemory || {}, apiKey, nextRefCount)
@@ -443,7 +468,7 @@ End with a hook to keep the convo alive.
   } catch (error: any) {
     console.error('[FlickScient] Fatal error:', error.message)
     return new Response(
-      JSON.stringify({ message: "There's a problem. Hold up, I'm fixing it 🛠️" }),
+      JSON.stringify({ message: "Something broke on my end 🛠️ Try again in a sec." }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
@@ -459,31 +484,7 @@ async function updateUserMemory(
   apiKey        : string,
   memoryRefCount: number
 ) {
-  const extractionPrompt = `
-You are a taste extraction engine for a cinema AI. Analyze the exchange below.
-
-User said   : "${userMessage}"
-AI responded: "${aiResponse}"
-
-Current profile : ${JSON.stringify(existingMemory.taste_profile || {})}
-Current summary : ${existingMemory.conversation_summary || 'None'}
-
-Return ONLY a valid raw JSON object. No markdown. No explanation. No text outside the JSON.
-{
-  "updated_taste_profile": {
-    "favorite_genres"   : [],
-    "loved_movies"      : [],
-    "disliked_movies"   : [],
-    "favorite_directors": [],
-    "favorite_actors"   : [],
-    "favorite_composers": [],
-    "mood_patterns"     : [],
-    "viewing_style"     : ""
-  },
-  "updated_summary" : "2-3 sentences on evolving taste",
-  "detected_name"   : null
-}
-`
+  const extractionPrompt = buildExtractionPrompt(userMessage, aiResponse, existingMemory)
 
   const controller = new AbortController()
   const timeoutId  = setTimeout(() => controller.abort(), 15000)
@@ -503,30 +504,18 @@ Return ONLY a valid raw JSON object. No markdown. No explanation. No text outsid
     )
 
     clearTimeout(timeoutId)
-
-    if (!extractRes.ok) {
-      console.warn(`[FlickScient] Memory extraction API ${extractRes.status}`)
-      return
-    }
+    if (!extractRes.ok) return
 
     const extractData = await extractRes.json()
     const rawText     = extractData.candidates?.[0]?.content?.parts?.[0]?.text
     if (!rawText) return
 
-    // JSON Shield: strip all text outside { } boundaries
     const jsonMatch = rawText.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      console.warn('[FlickScient] JSON Shield: no valid JSON found in extraction response')
-      return
-    }
+    if (!jsonMatch) return
 
     const extracted = safeJsonParse(jsonMatch[0], null)
-    if (!extracted?.updated_taste_profile) {
-      console.warn('[FlickScient] Extracted data invalid or missing taste_profile')
-      return
-    }
+    if (!extracted?.updated_taste_profile) return
 
-    // Merge instead of overwrite
     const mergedTaste = mergeTasteProfiles(existingMemory.taste_profile, extracted.updated_taste_profile)
 
     const upsertPayload: Record<string, any> = {
@@ -537,33 +526,26 @@ Return ONLY a valid raw JSON object. No markdown. No explanation. No text outsid
       memory_reference_count: memoryRefCount,
     }
 
-    // Only set name if freshly detected and not already stored
     if (extracted.detected_name && !existingMemory.name) {
       upsertPayload.name = extracted.detected_name
     }
 
-    // Probabilistic name cooldown tracking
     if (Math.random() < MAX_NAME_FREQUENCY) {
       upsertPayload.last_name_used_at = Date.now()
     }
 
-    // FIX 2 — await on every DB write
     const { error: upsertError } = await supabase
       .from('flickscient_users')
       .upsert(upsertPayload, { onConflict: 'user_id_hash' })
 
     if (upsertError) {
-      console.error('[FlickScient] Supabase upsert failed:', upsertError.message, upsertError.code)
+      console.error('[FlickScient] Upsert failed:', upsertError.message)
     } else {
       console.log('[FlickScient] Memory updated for:', hashedUserId)
     }
 
   } catch (e: any) {
     clearTimeout(timeoutId)
-    if (e.name === 'AbortError') {
-      console.warn('[FlickScient] Memory update timed out (background — non-critical)')
-      return
-    }
-    console.error('[FlickScient] Memory update error:', e)
+    if (e.name !== 'AbortError') console.error('[FlickScient] Memory error:', e)
   }
 }
