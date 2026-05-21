@@ -113,7 +113,7 @@ function LoginScreen() {
     setMsg({ text: '', ok: false });
     const { error } = mode === 'login'
       ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: 'https://moviesyncfs.netlify.app' } });
+      : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: 'https://moviesyncfs.vercel.app' } });
     if (error) setMsg({ text: error.message, ok: false });
     else if (mode === 'signup') setMsg({ text: 'Check your email to confirm your account ✓', ok: true });
     setLoading(false);
@@ -123,7 +123,7 @@ function LoginScreen() {
     setLoading(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: 'https://moviesyncfs.netlify.app' },
+      options: { redirectTo: 'https://moviesyncfs.vercel.app' },
     });
     if (error) { setMsg({ text: error.message, ok: false }); setLoading(false); }
   };
