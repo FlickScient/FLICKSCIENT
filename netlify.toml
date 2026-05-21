@@ -1,7 +1,7 @@
 [build]
-  base = "."
-  command = "pnpm install --no-frozen-lockfile && pnpm --filter @workspace/movie-tracker run build"
-  publish = "artifacts/movie-tracker/dist/public"
+  base = "artifacts/movie-tracker"
+  command = "pnpm install --no-frozen-lockfile && pnpm run build"
+  publish = "dist/public"
 
 [build.environment]
   SECRETS_SCAN_ENABLED = "false"
