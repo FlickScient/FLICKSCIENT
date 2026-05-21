@@ -101,40 +101,106 @@ const tmdb      = (path) => fetch(`https://api.themoviedb.org/3${path}`, TMDB_HE
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 function LoginScreen() {
-  const [email, setEmail]     = useState('');
+  const [mode, setMode]         = useState('login');
+  const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading]   = useState(false);
+  const [msg, setMsg]           = useState({ text: '', ok: false });
 
-  const handleAuth = async (type) => {
+  const handleAuth = async (e) => {
+    e.preventDefault();
     setLoading(true);
-    const { error } = type === 'login'
+    setMsg({ text: '', ok: false });
+    const { error } = mode === 'login'
       ? await supabase.auth.signInWithPassword({ email, password })
       : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: 'https://moviesyncfs.netlify.app' } });
-    if (error) alert(error.message);
+    if (error) setMsg({ text: error.message, ok: false });
+    else if (mode === 'signup') setMsg({ text: 'Check your email to confirm your account ✓', ok: true });
     setLoading(false);
   };
 
+  const handleGoogle = async () => {
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: 'https://moviesyncfs.netlify.app' },
+    });
+    if (error) { setMsg({ text: error.message, ok: false }); setLoading(false); }
+  };
+
+  const inputCls = "w-full bg-[#0d0d12] text-white px-4 py-3.5 rounded-xl border border-gray-800 outline-none focus:border-yellow-500/40 focus:ring-1 focus:ring-yellow-500/10 transition-all text-sm placeholder-gray-600";
+
   return (
-    <div className="min-h-screen bg-[#0a0a0c] text-white flex items-center justify-center p-6">
-      <div className="w-full max-w-md bg-[#16161d] p-8 rounded-3xl border border-white/5 shadow-2xl text-center">
-        <p className="text-[10px] uppercase tracking-[0.4em] text-gray-500 mb-2 font-black">The Ultimate Canon</p>
-        <h2 className="text-3xl font-black text-yellow-500 mb-2">Movie Sync</h2>
-        <p className="text-xs text-gray-600 mb-1">Your personal masterpiece tracker</p>
-        <p className="text-[10px] text-gray-700 mb-8">
-          Made by <span className="text-yellow-700 font-bold">Mahmudul Hasan Mahid</span>
-        </p>
-        <input type="email" placeholder="Email"
-          className="w-full bg-[#0a0a0c] p-4 rounded-xl mb-4 border border-gray-800 outline-none focus:border-yellow-500/50 transition-colors text-sm"
-          onChange={e => setEmail(e.target.value)} />
-        <input type="password" placeholder="Password"
-          className="w-full bg-[#0a0a0c] p-4 rounded-xl mb-6 border border-gray-800 outline-none focus:border-yellow-500/50 transition-colors text-sm"
-          onChange={e => setPassword(e.target.value)} />
-        <div className="flex gap-3">
-          <button onClick={() => handleAuth('login')} disabled={loading}
-            className="flex-1 bg-yellow-500 text-black font-bold py-4 rounded-xl hover:bg-yellow-400 transition-colors disabled:opacity-50">Login</button>
-          <button onClick={() => handleAuth('signup')} disabled={loading}
-            className="flex-1 bg-white/5 text-white font-bold py-4 rounded-xl border border-white/10 hover:bg-white/10 transition-colors disabled:opacity-50">Sign Up</button>
+    <div className="min-h-screen bg-[#0a0a0c] text-white flex items-center justify-center p-5"
+      style={{ background: 'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(234,179,8,0.07) 0%, #0a0a0c 65%)' }}>
+      <div className="w-full max-w-sm">
+
+        {/* Branding */}
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center mx-auto mb-4 shadow-[0_0_40px_rgba(234,179,8,0.12)]">
+            <span className="text-3xl">🎬</span>
+          </div>
+          <h1 className="text-2xl font-black text-white tracking-tight">
+            Movie<span className="text-yellow-500">Sync</span>
+          </h1>
+          <p className="text-[10px] text-gray-600 mt-1 uppercase tracking-[0.3em] font-bold">The Ultimate Canon</p>
         </div>
+
+        {/* Card */}
+        <div className="bg-[#111118] rounded-3xl border border-white/5 p-6 shadow-2xl">
+
+          {/* Mode tabs */}
+          <div className="flex bg-[#0a0a0c] rounded-2xl p-1 mb-6 border border-white/5">
+            {['login','signup'].map(m => (
+              <button key={m} onClick={() => { setMode(m); setMsg({ text:'', ok:false }); }}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all ${mode===m ? 'bg-yellow-500 text-black shadow-md' : 'text-gray-500 hover:text-gray-300'}`}>
+                {m === 'login' ? 'Log In' : 'Sign Up'}
+              </button>
+            ))}
+          </div>
+
+          {/* Google */}
+          <button onClick={handleGoogle} disabled={loading}
+            className="w-full flex items-center justify-center gap-3 bg-white text-gray-900 font-bold py-3.5 rounded-2xl mb-5 hover:bg-gray-100 active:scale-[0.98] transition-all disabled:opacity-50 text-sm shadow-sm">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908C16.658 12.075 17.64 9.768 17.64 9.2z" fill="#4285F4"/>
+              <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+              <path d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" fill="#FBBC05"/>
+              <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.96L3.964 7.293C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+            </svg>
+            Continue with Google
+          </button>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3 mb-5">
+            <div className="flex-1 h-px bg-white/5" />
+            <span className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">or</span>
+            <div className="flex-1 h-px bg-white/5" />
+          </div>
+
+          {/* Email form */}
+          <form onSubmit={handleAuth} className="space-y-3">
+            <input type="email" placeholder="Email address" required value={email}
+              className={inputCls} onChange={e => setEmail(e.target.value)} />
+            <input type="password" placeholder="Password" required value={password}
+              className={inputCls} onChange={e => setPassword(e.target.value)} />
+
+            {msg.text && (
+              <p className={`text-[12px] text-center font-medium px-3 py-2.5 rounded-xl ${msg.ok ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                {msg.text}
+              </p>
+            )}
+
+            <button type="submit" disabled={loading}
+              className="w-full bg-yellow-500 text-black font-black py-4 rounded-2xl hover:bg-yellow-400 active:scale-[0.98] transition-all disabled:opacity-50 text-sm">
+              {loading ? '···' : mode === 'login' ? 'Log In' : 'Create Account'}
+            </button>
+          </form>
+        </div>
+
+        <p className="text-center text-[10px] text-gray-700 mt-5">
+          Made by <span className="text-yellow-800 font-bold">Mahmudul Hasan Mahid</span>
+        </p>
       </div>
     </div>
   );
