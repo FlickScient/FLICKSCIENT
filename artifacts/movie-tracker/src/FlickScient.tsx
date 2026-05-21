@@ -256,10 +256,17 @@ export default function FlickScient({ myList }) {
         text: data?.message || "My vision is a bit blurry. Try again?",
       }]);
     } catch (error) {
-      setMessages(prev => [...prev, {
-        id: 'err-' + Date.now(), sender: 'ai',
-        text: "Something went wrong on my end — try again in a sec.",
-      }]);
+      // FunctionsHttpError carries the response body — read the message from it
+      let errMsg = "Something broke on my end — try again in a sec. 🛠️";
+      try {
+        if (error?.context) {
+          const body = await error.context.json();
+          if (body?.message) errMsg = body.message;
+        } else if (error?.message && !/http|fetch|invoke/i.test(error.message)) {
+          errMsg = error.message;
+        }
+      } catch {}
+      setMessages(prev => [...prev, { id: 'err-' + Date.now(), sender: 'ai', text: errMsg }]);
     } finally {
       setLoading(false);
     }
