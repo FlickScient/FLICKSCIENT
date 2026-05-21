@@ -1,6 +1,6 @@
 {
-  "buildCommand": "pnpm install --no-frozen-lockfile --ignore-workspace && pnpm run build",
-  "outputDirectory": "dist/public",
+  "buildCommand": "cd artifacts/movie-tracker && npm install && npm run build",
+  "outputDirectory": "artifacts/movie-tracker/dist/public",
   "rewrites": [
     {
       "source": "/(.*)",
