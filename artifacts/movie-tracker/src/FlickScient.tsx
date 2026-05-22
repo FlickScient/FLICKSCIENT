@@ -453,8 +453,8 @@ export default function FlickScient({ myList }) {
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }, []);
 
-  const watchedTitles   = myList.filter(m => m.watched || m.status === 'watched').map(m => m.title).join(', ');
-  const watchlistTitles = myList.filter(m => m.status === 'watchlist').map(m => m.title).join(', ');
+  const watchedTitles   = myList.filter(m => m.watched || m.status === 'watched').slice(-15).map(m => m.title).join(', ');
+  const watchlistTitles = myList.filter(m => m.status === 'watchlist').slice(-8).map(m => m.title).join(', ');
 
   const animateText = useCallback((fullText, msgId) => {
     if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
@@ -497,7 +497,7 @@ export default function FlickScient({ myList }) {
     const userQuery = text.trim();
     const conversationHistory = messages
       .filter(m => m.id !== 'welcome')
-      .slice(-20)
+      .slice(-10)
       .map(m => ({ role: m.sender === 'user' ? 'user' : 'model', content: m.text }));
     setMessages(prev => [...prev, { id: Date.now().toString(), sender: 'user', text: userQuery }]);
     setLoading(true);
