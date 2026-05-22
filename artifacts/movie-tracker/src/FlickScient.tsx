@@ -453,8 +453,8 @@ export default function FlickScient({ myList }) {
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }, []);
 
-  const watchedTitles   = myList.filter(m => m.watched || m.status === 'watched').slice(-15).map(m => m.title).join(', ');
-  const watchlistTitles = myList.filter(m => m.status === 'watchlist').slice(-8).map(m => m.title).join(', ');
+  const watchedTitles   = myList.filter(m => m.watched || m.status === 'watched').map(m => m.title).join(', ');
+  const watchlistTitles = myList.filter(m => m.status === 'watchlist').map(m => m.title).join(', ');
 
   const animateText = useCallback((fullText, msgId) => {
     if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
@@ -504,12 +504,11 @@ export default function FlickScient({ myList }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id || null;
-      const libraryContext = [
-        watchedTitles   ? `Watched: ${watchedTitles}`   : '',
-        watchlistTitles ? `Watchlist: ${watchlistTitles}` : '',
-      ].filter(Boolean).join(' | ');
+      const watchedPrefix   = watchedTitles   ? `[Watched: ${watchedTitles}]`   : '';
+      const watchlistPrefix = watchlistTitles ? `[Watchlist: ${watchlistTitles}]` : '';
+      const libraryPrefix   = [watchedPrefix, watchlistPrefix].filter(Boolean).join(' ');
       const { data } = await invokeFlickScient({
-        prompt: `[Library: ${libraryContext || 'empty'}] ${userQuery}`,
+        prompt: libraryPrefix ? `${libraryPrefix} ${userQuery}` : userQuery,
         userId,
         conversationHistory,
       });
