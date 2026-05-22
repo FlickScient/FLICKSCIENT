@@ -1796,16 +1796,20 @@ export default function App() {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      cleanAuthHash();
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      setUser(session?.user ?? null);
-      cleanAuthHash();
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+  supabase.auth.exchangeCodeForSession(window.location.search)
+    .catch(() => {})
+    .finally(() => {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setUser(session?.user ?? null)
+        cleanAuthHash()
+      })
+    })
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+    setUser(session?.user ?? null)
+    cleanAuthHash()
+  })
+  return () => subscription.unsubscribe()
+}, []);
 
   useEffect(() => {
     const onHashChange = () => setViewState(getViewFromHash());
