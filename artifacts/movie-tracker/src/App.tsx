@@ -15,6 +15,7 @@ const TMDB_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI4MTA1NDM4MWYzY2M2NGY1ZjllNmV
 const SUPABASE_URL = "https://rcdjmzxiectkckufyqyr.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjZGptenhpZWN0a2NrdWZ5cXlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1NjcxOTMsImV4cCI6MjA5MzE0MzE5M30.TNFfE6RDV4MX3H-M8zA-h72lux4Mgdd9srqDFJAJHnE";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { flowType: 'pkce', detectSessionInUrl: true } });
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 const TMDB_GENRES = {
   28: 'Action', 12: 'Adventure', 16: 'Animation', 35: 'Comedy',
@@ -105,6 +106,7 @@ function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading]   = useState(false);
   const [msg, setMsg]           = useState({ text: '', ok: false });
+  const [forgotMode, setForgotMode] = useState(false);
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -112,9 +114,21 @@ function LoginScreen() {
     setMsg({ text: '', ok: false });
     const { error } = mode === 'login'
       ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password, options: { redirectTo: window.location.origin + '/auth/callback' } });
+      : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: 'https://moviesyncfs.vercel.app' } });
     if (error) setMsg({ text: error.message, ok: false });
     else if (mode === 'signup') setMsg({ text: 'Check your email to confirm your account ✓', ok: true });
+    setLoading(false);
+  };
+
+  const handleForgot = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setMsg({ text: '', ok: false });
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: 'https://moviesyncfs.vercel.app',
+    });
+    if (error) setMsg({ text: error.message, ok: false });
+    else setMsg({ text: 'Reset link sent — check your email ✓', ok: true });
     setLoading(false);
   };
 
@@ -122,10 +136,8 @@ function LoginScreen() {
     setLoading(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { 
-  redirectTo: 'https://moviesyncfs.vercel.app',
-  queryParams: { prompt: 'select_account' }
-},
+      options: { redirectTo: 'https://moviesyncfs.vercel.app' },
+    });
     if (error) { setMsg({ text: error.message, ok: false }); setLoading(false); }
   };
 
@@ -150,53 +162,86 @@ function LoginScreen() {
         {/* Card */}
         <div className="bg-[#111118] rounded-3xl border border-white/5 p-6 shadow-2xl">
 
-          {/* Mode tabs */}
-          <div className="flex bg-[#0a0a0c] rounded-2xl p-1 mb-6 border border-white/5">
-            {['login','signup'].map(m => (
-              <button key={m} onClick={() => { setMode(m); setMsg({ text:'', ok:false }); }}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all ${mode===m ? 'bg-yellow-500 text-black shadow-md' : 'text-gray-500 hover:text-gray-300'}`}>
-                {m === 'login' ? 'Log In' : 'Sign Up'}
+          {forgotMode ? (
+            <>
+              <button onClick={() => { setForgotMode(false); setMsg({ text:'', ok:false }); }}
+                className="flex items-center gap-1.5 text-gray-600 text-xs hover:text-gray-400 mb-5 transition-colors">
+                ← Back to login
               </button>
-            ))}
-          </div>
+              <p className="text-sm font-black text-white mb-1">Reset Password</p>
+              <p className="text-[11px] text-gray-600 mb-4">Enter your email and we'll send a reset link.</p>
+              <form onSubmit={handleForgot} className="space-y-3">
+                <input type="email" placeholder="Email address" required value={email}
+                  className={inputCls} onChange={e => setEmail(e.target.value)} />
+                {msg.text && (
+                  <p className={`text-[12px] text-center font-medium px-3 py-2.5 rounded-xl ${msg.ok ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                    {msg.text}
+                  </p>
+                )}
+                <button type="submit" disabled={loading}
+                  className="w-full bg-yellow-500 text-black font-black py-4 rounded-2xl hover:bg-yellow-400 active:scale-[0.98] transition-all disabled:opacity-50 text-sm">
+                  {loading ? '···' : 'Send Reset Link'}
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              {/* Mode tabs */}
+              <div className="flex bg-[#0a0a0c] rounded-2xl p-1 mb-6 border border-white/5">
+                {['login','signup'].map(m => (
+                  <button key={m} onClick={() => { setMode(m); setMsg({ text:'', ok:false }); }}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all ${mode===m ? 'bg-yellow-500 text-black shadow-md' : 'text-gray-500 hover:text-gray-300'}`}>
+                    {m === 'login' ? 'Log In' : 'Sign Up'}
+                  </button>
+                ))}
+              </div>
 
-          {/* Google */}
-          <button onClick={handleGoogle} disabled={loading}
-            className="w-full flex items-center justify-center gap-3 bg-white text-gray-900 font-bold py-3.5 rounded-2xl mb-5 hover:bg-gray-100 active:scale-[0.98] transition-all disabled:opacity-50 text-sm shadow-sm">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908C16.658 12.075 17.64 9.768 17.64 9.2z" fill="#4285F4"/>
-              <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
-              <path d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" fill="#FBBC05"/>
-              <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.96L3.964 7.293C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
-            </svg>
-            Continue with Google
-          </button>
+              {/* Google */}
+              <button onClick={handleGoogle} disabled={loading}
+                className="w-full flex items-center justify-center gap-3 bg-white text-gray-900 font-bold py-3.5 rounded-2xl mb-5 hover:bg-gray-100 active:scale-[0.98] transition-all disabled:opacity-50 text-sm shadow-sm">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                  <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908C16.658 12.075 17.64 9.768 17.64 9.2z" fill="#4285F4"/>
+                  <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+                  <path d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" fill="#FBBC05"/>
+                  <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.96L3.964 7.293C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+                </svg>
+                Continue with Google
+              </button>
 
-          {/* Divider */}
-          <div className="flex items-center gap-3 mb-5">
-            <div className="flex-1 h-px bg-white/5" />
-            <span className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">or</span>
-            <div className="flex-1 h-px bg-white/5" />
-          </div>
+              {/* Divider */}
+              <div className="flex items-center gap-3 mb-5">
+                <div className="flex-1 h-px bg-white/5" />
+                <span className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">or</span>
+                <div className="flex-1 h-px bg-white/5" />
+              </div>
 
-          {/* Email form */}
-          <form onSubmit={handleAuth} className="space-y-3">
-            <input type="email" placeholder="Email address" required value={email}
-              className={inputCls} onChange={e => setEmail(e.target.value)} />
-            <input type="password" placeholder="Password" required value={password}
-              className={inputCls} onChange={e => setPassword(e.target.value)} />
+              {/* Email form */}
+              <form onSubmit={handleAuth} className="space-y-3">
+                <input type="email" placeholder="Email address" required value={email}
+                  className={inputCls} onChange={e => setEmail(e.target.value)} />
+                <input type="password" placeholder="Password" required value={password}
+                  className={inputCls} onChange={e => setPassword(e.target.value)} />
 
-            {msg.text && (
-              <p className={`text-[12px] text-center font-medium px-3 py-2.5 rounded-xl ${msg.ok ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
-                {msg.text}
-              </p>
-            )}
+                {msg.text && (
+                  <p className={`text-[12px] text-center font-medium px-3 py-2.5 rounded-xl ${msg.ok ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                    {msg.text}
+                  </p>
+                )}
 
-            <button type="submit" disabled={loading}
-              className="w-full bg-yellow-500 text-black font-black py-4 rounded-2xl hover:bg-yellow-400 active:scale-[0.98] transition-all disabled:opacity-50 text-sm">
-              {loading ? '···' : mode === 'login' ? 'Log In' : 'Create Account'}
-            </button>
-          </form>
+                <button type="submit" disabled={loading}
+                  className="w-full bg-yellow-500 text-black font-black py-4 rounded-2xl hover:bg-yellow-400 active:scale-[0.98] transition-all disabled:opacity-50 text-sm">
+                  {loading ? '···' : mode === 'login' ? 'Log In' : 'Create Account'}
+                </button>
+
+                {mode === 'login' && (
+                  <button type="button" onClick={() => { setForgotMode(true); setMsg({ text:'', ok:false }); }}
+                    className="w-full text-center text-[11px] text-gray-600 hover:text-yellow-600 transition-colors pt-1">
+                    Forgot password?
+                  </button>
+                )}
+              </form>
+            </>
+          )}
         </div>
 
         <p className="text-center text-[10px] text-gray-700 mt-5">
@@ -1729,16 +1774,10 @@ export default function App() {
   const [drawerOpen,  setDrawerOpen] = useState(false);
 
   useEffect(() => {
-  supabase.auth.exchangeCodeForSession(window.location.search)
-    .catch(() => {})
-    .finally(() => {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setUser(session?.user ?? null)
-      })
-    })
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => setUser(session?.user ?? null))
-  return () => subscription.unsubscribe()
-}, []);
+    supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => setUser(session?.user ?? null));
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => { if (user) fetchMovies(); else setMovies([]); }, [user]);
 
