@@ -422,8 +422,8 @@ serve(async (req) => {
     const greeting             = isSimpleGreeting(userPrompt)
     const maxTokens            = greeting ? 250 : 2048
 
-    // ── Fetch live knowledge base (non-blocking, fails silently) ─────────────
-    const mahidInfo = await fetchKnowledgeBase()
+    // ── Fetch live knowledge base only when someone asks about Mahid ──────────
+    const mahidInfo = (askingAboutMahid || isVerifiedMahid) ? await fetchKnowledgeBase() : ''
 
     // ── System prompt ─────────────────────────────────────────────────────────
     const systemPrompt = buildSystemPrompt(
