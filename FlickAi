@@ -296,10 +296,11 @@ serve(async (req) => {
   let isCreatorOuter = false
 
   try {
-    const body       = await req.json()
-    const rawInput   = body.prompt || body.message || 'Yo'
-    const userPrompt = sanitizeInput(rawInput)
-    const rawUserId  = body.userId || null
+    const body               = await req.json()
+    const rawInput           = body.prompt || body.message || 'Yo'
+    const userPrompt         = sanitizeInput(rawInput)
+    const rawUserId          = body.userId || null
+    const conversationHistory: Array<{ role: string; content: string }> = body.conversationHistory || []
 
     // ── Identify user + load memory first (works without GEMINI_API_KEY) ─────
     let hashedUserId: string | null = null
@@ -376,12 +377,24 @@ serve(async (req) => {
     // This makes dodging impossible — the answer is already written
     const mahidOpener = askingAboutMahid ? buildMahidAnswer(isVerifiedMahid) : ''
 
+    // ── Build multi-turn history for Gemini ───────────────────────────────────
+    const historyContents = conversationHistory
+      .filter(m => m.content && m.content.trim())
+      .map(m => ({
+        role : m.role === 'user' ? 'user' : 'model',
+        parts: [{ text: m.content }],
+      }))
+
     const geminiContents = mahidOpener
       ? [
-          { role: 'user',      parts: [{ text: userPrompt }] },
-          { role: 'model',     parts: [{ text: mahidOpener }] },
+          ...historyContents,
+          { role: 'user',  parts: [{ text: userPrompt }] },
+          { role: 'model', parts: [{ text: mahidOpener }] },
         ]
-      : [{ parts: [{ text: userPrompt }] }]
+      : [
+          ...historyContents,
+          { role: 'user', parts: [{ text: userPrompt }] },
+        ]
 
     // ── Call Gemini ───────────────────────────────────────────────────────────
     const controller = new AbortController()
@@ -397,6 +410,7 @@ serve(async (req) => {
           body   : JSON.stringify({
             contents         : geminiContents,
             systemInstruction: { parts: [{ text: systemPrompt }] },
+            tools            : [{ googleSearch: {} }],
             generationConfig : {
               temperature    : 1.05,
               topP           : 0.97,
