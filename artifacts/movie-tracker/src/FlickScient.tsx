@@ -1,7 +1,13 @@
 // @ts-nocheck
-import { supabase, ANON_KEY_VALUE } from './lib/supabase';
+import { supabase } from './lib/supabase';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Sparkles, User, Clapperboard, Link, Copy, Check, Users, ArrowLeft, Clock, Trash2, Plus } from 'lucide-react';
+import { Send, Sparkles, User, Clapperboard, Link, Copy, Check, Users, ArrowLeft, Clock, Trash2, Plus, X, Star, Bookmark, Eye } from 'lucide-react';
+
+// ─── TMDB helpers ─────────────────────────────────────────────────────────────
+const TMDB_TOKEN = import.meta.env.VITE_TMDB_TOKEN as string;
+const TMDB_HEAD  = { headers: { Authorization: `Bearer ${TMDB_TOKEN}` } };
+const tmdbFetch  = (path: string) => fetch(`https://api.themoviedb.org/3${path}`, TMDB_HEAD).then(r => r.json());
+const TMDB_IMG   = (path: string, size = 'w500') => path ? `https://image.tmdb.org/t/p/${size}${path}` : null;
 
 // ─── Mood Pills ───────────────────────────────────────────────────────────────
 const MOOD_PILLS = [
@@ -203,29 +209,191 @@ function SyncRoom({ myList, onSendToAI }) {
   return null;
 }
 
-// ─── Movie Quick Add Card ─────────────────────────────────────────────────────
-function MovieQuickAdd({ title }) {
-  const [wlDone, setWlDone] = useState(false);
-  const [wDone,  setWDone]  = useState(false);
+// ─── Movie Detail Sheet ───────────────────────────────────────────────────────
+function MovieDetailSheet({ title, onClose }) {
+  const [movie,   setMovie]   = useState(null);
+  const [busy,    setBusy]    = useState(true);
+  const [added,   setAdded]   = useState(null); // 'watchlist' | 'watched'
+  const [rating,  setRating]  = useState(0);
 
-  const add = async (status, watched) => {
-    const { error } = await supabase.from('movies').insert({ title, status, watched, type: 'Movie' });
-    if (!error) { if (status === 'watchlist') setWlDone(true); else setWDone(true); }
+  useEffect(() => {
+    let cancelled = false;
+    setBusy(true); setMovie(null); setAdded(null); setRating(0);
+    (async () => {
+      try {
+        // try movie first, then TV
+        for (const mediaType of ['movie', 'tv']) {
+          const key = mediaType === 'movie' ? 'title' : 'name';
+          const src = await tmdbFetch(`/search/${mediaType}?query=${encodeURIComponent(title)}&page=1`);
+          const hit = src.results?.[0];
+          if (!hit) continue;
+          const [det, cred] = await Promise.all([
+            tmdbFetch(`/${mediaType}/${hit.id}?append_to_response=videos`),
+            tmdbFetch(`/${mediaType}/${hit.id}/credits`),
+          ]);
+          if (!cancelled) setMovie({ ...det, mediaType, displayTitle: det[key] || title, cast: (cred.cast || []).slice(0, 8) });
+          break;
+        }
+      } catch {}
+      if (!cancelled) setBusy(false);
+    })();
+    return () => { cancelled = true; };
+  }, [title]);
+
+  const save = async (status, watched) => {
+    const t    = movie?.displayTitle || title;
+    const year = (movie?.release_date || movie?.first_air_date || '').slice(0, 4);
+    const { error } = await supabase.from('movies').insert({
+      title: t,
+      year: parseInt(year) || null,
+      poster: movie?.poster_path ? TMDB_IMG(movie.poster_path) : null,
+      genre: movie?.genres?.[0]?.name || null,
+      tmdb_id: movie?.id || null,
+      type: movie?.mediaType === 'tv' ? 'Series' : 'Movie',
+      language: movie?.original_language || 'en',
+      status,
+      watched,
+      rating: rating || null,
+    });
+    if (!error) setAdded(status);
   };
 
+  const runtime = movie
+    ? movie.runtime
+      ? `${Math.floor(movie.runtime / 60)}h ${movie.runtime % 60}m`
+      : movie.episode_run_time?.[0]
+      ? `~${movie.episode_run_time[0]}m/ep`
+      : null
+    : null;
+
+  const voteAvg = movie?.vote_average ? movie.vote_average.toFixed(1) : null;
+
   return (
-    <div className="bg-[#16161f] border border-white/[0.06] rounded-xl px-3 py-2 flex items-center gap-2">
-      <span className="text-[11px] text-gray-400 font-bold truncate flex-1">🎬 {title}</span>
-      <div className="flex gap-1.5 flex-shrink-0">
-        <button onClick={() => add('watchlist', false)} disabled={wlDone || wDone}
-          className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all active:scale-95 ${wlDone ? 'bg-blue-500/20 text-blue-400 border border-blue-500/20' : 'bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20'}`}>
-          {wlDone ? '✓ Added' : '+ Watchlist'}
+    <div className="fixed inset-0 z-[90] flex items-end" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-h-[88vh] bg-[#111116] rounded-t-3xl overflow-y-auto z-10"
+        style={{ animation: 'slideUp 0.28s cubic-bezier(0.32,0.72,0,1)' }}>
+
+        {/* Backdrop / poster hero */}
+        {busy ? (
+          <div className="w-full h-48 bg-[#1a1a24] animate-pulse rounded-t-3xl" />
+        ) : movie?.backdrop_path || movie?.poster_path ? (
+          <div className="relative w-full h-52 flex-shrink-0">
+            <img src={TMDB_IMG(movie.backdrop_path || movie.poster_path, 'w780')}
+              alt="" className="w-full h-full object-cover rounded-t-3xl" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#111116] via-[#111116]/50 to-transparent rounded-t-3xl" />
+          </div>
+        ) : (
+          <div className="w-full h-24 bg-[#1a1a24] rounded-t-3xl" />
+        )}
+
+        {/* Close */}
+        <button onClick={onClose}
+          className="absolute top-4 right-4 w-8 h-8 bg-black/50 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/10 z-20">
+          <X size={16} />
         </button>
-        <button onClick={() => add('watched', true)} disabled={wDone || wlDone}
-          className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all active:scale-95 ${wDone ? 'bg-green-500/20 text-green-400 border border-green-500/20' : 'bg-green-500/10 border border-green-500/20 text-green-400 hover:bg-green-500/20'}`}>
-          {wDone ? '✓ Logged' : '👁 Watched'}
-        </button>
+
+        <div className="px-5 pb-10 -mt-10 relative z-10">
+          {busy ? (
+            <div className="space-y-3 pt-2">
+              <div className="h-6 bg-white/5 rounded-xl w-3/4 animate-pulse" />
+              <div className="h-4 bg-white/5 rounded-xl w-1/2 animate-pulse" />
+              <div className="h-20 bg-white/5 rounded-xl animate-pulse mt-4" />
+            </div>
+          ) : !movie ? (
+            <div className="py-10 text-center">
+              <p className="text-gray-500 text-sm">Couldn't find details for <span className="text-yellow-400 font-bold">"{title}"</span></p>
+              <p className="text-gray-700 text-xs mt-1">You can still add it manually from your library.</p>
+            </div>
+          ) : (
+            <>
+              {/* Title + meta */}
+              <h2 className="text-xl font-black text-white leading-tight mb-1">{movie.displayTitle}</h2>
+              <div className="flex items-center gap-2 flex-wrap mb-4">
+                {(movie.release_date || movie.first_air_date) && (
+                  <span className="text-yellow-500 font-bold text-sm">
+                    {(movie.release_date || movie.first_air_date).slice(0, 4)}
+                  </span>
+                )}
+                {runtime && <><span className="text-gray-700">·</span><span className="text-gray-400 text-xs">{runtime}</span></>}
+                <span className="text-gray-700">·</span>
+                <span className="text-[10px] text-gray-500 uppercase tracking-wider">
+                  {movie.mediaType === 'tv' ? 'Series' : 'Movie'}
+                </span>
+                {movie.genres?.[0] && (
+                  <span className="text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider bg-purple-900/60 text-purple-300">
+                    {movie.genres[0].name}
+                  </span>
+                )}
+                {voteAvg && (
+                  <span className="flex items-center gap-1 text-xs text-yellow-500 font-bold ml-auto">
+                    <Star size={11} fill="currentColor" /> {voteAvg}
+                  </span>
+                )}
+              </div>
+
+              {/* Overview */}
+              {movie.overview && (
+                <p className="text-gray-400 text-[13px] leading-relaxed mb-5">{movie.overview}</p>
+              )}
+
+              {/* Star rating */}
+              {!added && (
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-[11px] text-gray-600 font-bold">Rate it:</span>
+                  <div className="flex gap-1">
+                    {[1,2,3,4,5].map(s => (
+                      <button key={s} onClick={() => setRating(s === rating ? 0 : s)}
+                        className={`transition-colors ${s <= rating ? 'text-yellow-500' : 'text-gray-700'} hover:text-yellow-400`}>
+                        <Star size={18} fill={s <= rating ? 'currentColor' : 'none'} strokeWidth={1.5} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              {added ? (
+                <div className={`w-full py-3.5 rounded-2xl text-center text-sm font-black border ${added === 'watchlist' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : 'bg-green-500/20 text-green-400 border-green-500/30'}`}>
+                  {added === 'watchlist' ? '✓ Added to Watchlist' : '✓ Marked as Watched'}
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button onClick={() => save('watchlist', false)}
+                    className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-400 font-black text-sm hover:bg-blue-500/20 active:scale-[0.98] transition-all">
+                    <Bookmark size={15} /> Watchlist
+                  </button>
+                  <button onClick={() => save('watched', true)}
+                    className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-green-500/10 border border-green-500/30 text-green-400 font-black text-sm hover:bg-green-500/20 active:scale-[0.98] transition-all">
+                    <Eye size={15} /> Watched
+                  </button>
+                </div>
+              )}
+
+              {/* Cast */}
+              {movie.cast?.length > 0 && (
+                <div className="mt-5">
+                  <p className="text-[10px] uppercase tracking-widest text-gray-600 font-black mb-3">Cast</p>
+                  <div className="flex gap-3 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+                    {movie.cast.map(p => (
+                      <div key={p.id} className="flex-shrink-0 text-center w-14">
+                        <div className="w-14 h-14 rounded-2xl bg-[#1c1c26] border border-white/5 overflow-hidden mb-1">
+                          {p.profile_path
+                            ? <img src={TMDB_IMG(p.profile_path, 'w185')} alt={p.name} className="w-full h-full object-cover" />
+                            : <div className="w-full h-full flex items-center justify-center text-gray-700 text-xs font-black">{p.name[0]}</div>
+                          }
+                        </div>
+                        <p className="text-[9px] text-gray-500 leading-tight truncate">{p.name}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
+      <style>{`@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }`}</style>
     </div>
   );
 }
@@ -249,12 +417,13 @@ const WELCOME_MSG = {
 };
 
 export default function FlickScient({ myList }) {
-  const [messages,   setMessages]   = useState([WELCOME_MSG]);
-  const [input,      setInput]      = useState('');
-  const [loading,    setLoading]    = useState(false);
-  const [aiTab,      setAiTab]      = useState('chat');
-  const [sessionId,  setSessionId]  = useState(() => 'sid_' + Date.now());
-  const [sessions,   setSessions]   = useState(() => loadSessions());
+  const [messages,       setMessages]       = useState([WELCOME_MSG]);
+  const [input,          setInput]          = useState('');
+  const [loading,        setLoading]        = useState(false);
+  const [aiTab,          setAiTab]          = useState('chat');
+  const [sessionId,      setSessionId]      = useState(() => 'sid_' + Date.now());
+  const [sessions,       setSessions]       = useState(() => loadSessions());
+  const [selectedMovie,  setSelectedMovie]  = useState(null);
   const chatBottomRef    = useRef(null);
   const textareaRef      = useRef(null);
   const typingIntervalRef = useRef(null);
@@ -511,8 +680,6 @@ export default function FlickScient({ myList }) {
                 <p className="text-red-300 leading-relaxed">{adminDetail}</p>
               </div>
             );
-            const boldTitles = msg.sender === 'ai' && msg.id !== 'welcome' && msg.text.length > 0 && !msg.text.startsWith('⚙️')
-              ? parseBoldTitles(msg.text) : [];
             return (
             <div key={msg.id}>
               <div className={`flex items-start gap-3 ${msg.sender==='user' ? 'flex-row-reverse' : ''}`}>
@@ -522,16 +689,14 @@ export default function FlickScient({ myList }) {
                 <div className={`flex-1 p-4 rounded-2xl text-[13px] leading-relaxed border whitespace-pre-wrap select-text ${msg.sender==='user' ? 'bg-[#1a1a24] text-gray-100 border-white/5 font-medium rounded-tr-none ml-6' : 'bg-gradient-to-b from-[#121218] to-[#0f0f14] text-gray-200 border-white/5 rounded-tl-none mr-6 shadow-md'}`}>
                   {msg.text.split(/(\*\*[^*]+\*\*)/).map((part, i) =>
                     part.startsWith('**') && part.endsWith('**')
-                      ? <strong key={i} className="text-yellow-400 font-black">{part.slice(2,-2)}</strong>
+                      ? <button key={i} onClick={() => setSelectedMovie(part.slice(2,-2))}
+                          className="text-yellow-400 font-black hover:text-yellow-300 hover:underline underline-offset-2 transition-colors cursor-pointer">
+                          {part.slice(2,-2)}
+                        </button>
                       : part
                   )}
                 </div>
               </div>
-              {boldTitles.length > 0 && msg.id !== typingMsgId && (
-                <div className="ml-11 mr-6 mt-1.5 space-y-1.5">
-                  {boldTitles.map(title => <MovieQuickAdd key={title} title={title} />)}
-                </div>
-              )}
             </div>
             );
           })}
@@ -590,6 +755,10 @@ export default function FlickScient({ myList }) {
           <p className="text-[9px] text-gray-700 text-center mt-1.5">Enter to send · Shift+Enter for new line</p>
         </div>
       </>}
+
+      {selectedMovie && (
+        <MovieDetailSheet title={selectedMovie} onClose={() => setSelectedMovie(null)} />
+      )}
     </div>
   );
 }
