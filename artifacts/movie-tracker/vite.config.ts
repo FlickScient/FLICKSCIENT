@@ -17,11 +17,12 @@ export default defineConfig({
   },
   root: path.resolve(import.meta.dirname),
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    outDir: path.resolve(import.meta.dirname, "dist"),
     emptyOutDir: true,
   },
   server: {
-    port: 5173,
+    port: parseInt(process.env.PORT || '5173'),
     host: "0.0.0.0",
+    allowedHosts: true,
   },
 });
