@@ -114,7 +114,9 @@ function buildSystemPrompt(
   isVerifiedMahid: boolean,
   isImposter     : boolean,
   spoilerMode    : 'full' | 'none',
-  greeting       : boolean
+  greeting       : boolean,
+  watched        : string = '',
+  watchlist      : string = ''
 ): string {
 
   const tasteDNA = (() => {
@@ -218,16 +220,16 @@ Read EXACTLY what was sent. Respond to ONLY that. Don't pad. Don't pivot to movi
 • Heartbroken/emotional → one line of empathy, then the right film or song.
 • Deep dive → go full depth, no length limit.
 
-─── LIBRARY AWARENESS ───
-The user's prompt starts with [Watched: ...] and [Watchlist: ...]. These are SILENT FILTERS only.
+${watched ? `─── USER'S WATCHED LIST (EXCLUSION FILTER — READ THIS CAREFULLY) ───
+These titles exist only as a private filter in your brain. The user has already watched all of these:
+${watched}
 
-EXCLUSION (non-negotiable): Never recommend a title that appears in the Watched list. Ever. Even if it's perfect for the vibe. Find something else.
-
-TASTE SIGNAL: Use the Watched list to understand what kind of films and genres they gravitate toward. The more they've watched in a genre or style, the more that's part of their DNA. Factor this into every recommendation silently.
-
-WATCHLIST: If you would recommend something that's already on their Watchlist, you can briefly note they've already saved it ("you've already got that queued") — once, naturally.
-
-CONVERSATION RULE: Never open a response by talking about their library. Never say "I see you've watched X" or "looking at your list". The list doesn't exist in the conversation — it only exists in your brain as context. Respond to what they actually said first, every time, no exceptions.
+RULE 1 — HARD BLOCK: Never recommend any title from this list. Not even close alternatives with the same name. If you would normally suggest it, pick something else.
+RULE 2 — TASTE SIGNAL: Use this list silently to understand their genre preferences, directors they like, tone they gravitate toward. Never mention the list out loud.
+RULE 3 — NEVER SAY: "I see you've watched X", "based on your library", "looking at your list", or anything that references this list in conversation.` : ''}
+${watchlist ? `─── USER'S WATCHLIST ───
+They've already saved these for later: ${watchlist}
+If you'd recommend something on this list, briefly say they've already got it queued — once, naturally.` : ''}
 
 ─── HOW YOU TALK ───
 No bullet points. No numbered lists. No headers in responses. Pure conversation — like texting.
@@ -321,6 +323,8 @@ serve(async (req) => {
     const userPrompt         = sanitizeInput(rawInput)
     const rawUserId          = body.userId || null
     const conversationHistory: Array<{ role: string; content: string }> = body.conversationHistory || []
+    const watchedList        = (body.watched   || '').trim()
+    const watchlistList      = (body.watchlist || '').trim()
 
     // ── Identify user + load memory first (works without GEMINI_API_KEY) ─────
     let hashedUserId: string | null = null
@@ -389,7 +393,7 @@ serve(async (req) => {
 
     // ── System prompt ─────────────────────────────────────────────────────────
     const systemPrompt = buildSystemPrompt(
-      userMemory, isVerifiedMahid, isImposter, spoilerMode, greeting
+      userMemory, isVerifiedMahid, isImposter, spoilerMode, greeting, watchedList, watchlistList
     )
 
     // ── If asking about Mahid — force the answer as conversation opener ───────

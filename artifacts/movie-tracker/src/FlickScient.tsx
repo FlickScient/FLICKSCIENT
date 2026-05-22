@@ -504,13 +504,12 @@ export default function FlickScient({ myList }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id || null;
-      const watchedPrefix   = watchedTitles   ? `[Watched: ${watchedTitles}]`   : '';
-      const watchlistPrefix = watchlistTitles ? `[Watchlist: ${watchlistTitles}]` : '';
-      const libraryPrefix   = [watchedPrefix, watchlistPrefix].filter(Boolean).join(' ');
       const { data } = await invokeFlickScient({
-        prompt: libraryPrefix ? `${libraryPrefix} ${userQuery}` : userQuery,
+        prompt: userQuery,
         userId,
         conversationHistory,
+        watched:   watchedTitles   || '',
+        watchlist: watchlistTitles || '',
       });
       const aiText = data?.message || "My vision is a bit blurry. Try again?";
       setLoading(false);
