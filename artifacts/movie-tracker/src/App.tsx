@@ -1729,10 +1729,16 @@ export default function App() {
   const [drawerOpen,  setDrawerOpen] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => setUser(session?.user ?? null));
-    return () => subscription.unsubscribe();
-  }, []);
+  supabase.auth.exchangeCodeForSession(window.location.search)
+    .catch(() => {})
+    .finally(() => {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setUser(session?.user ?? null)
+      })
+    })
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => setUser(session?.user ?? null))
+  return () => subscription.unsubscribe()
+}, []);
 
   useEffect(() => { if (user) fetchMovies(); else setMovies([]); }, [user]);
 
