@@ -108,6 +108,28 @@ function mergeTasteProfiles(existing: TasteProfile = {}, fresh: TasteProfile = {
   return merged
 }
 
+// ─── Time helpers ─────────────────────────────────────────────────────────────
+function getTimeInMinutes(secondsFromNow: number): string {
+  const t = new Date(Date.now() + secondsFromNow * 1000)
+  const hh = String(t.getUTCHours()).padStart(2, '0')
+  const mm = String(t.getUTCMinutes()).padStart(2, '0')
+  return `${hh}:${mm} UTC`
+}
+
+// ─── Knowledge Base Fetch ─────────────────────────────────────────────────────
+const KNOWLEDGE_BASE_URL = 'https://raw.githubusercontent.com/FlickScient/FLICKSCIENT/main/mahidinfo.txt'
+
+async function fetchKnowledgeBase(): Promise<string> {
+  try {
+    const res = await fetch(KNOWLEDGE_BASE_URL, { signal: AbortSignal.timeout(4000) })
+    if (!res.ok) return ''
+    const text = await res.text()
+    return text.trim().slice(0, 4000) // cap at 4k chars to keep context lean
+  } catch {
+    return ''
+  }
+}
+
 // ─── Build System Prompt ──────────────────────────────────────────────────────
 function buildSystemPrompt(
   userMemory     : UserMemory | null,
@@ -116,7 +138,8 @@ function buildSystemPrompt(
   spoilerMode    : 'full' | 'none',
   greeting       : boolean,
   watched        : string = '',
-  watchlist      : string = ''
+  watchlist      : string = '',
+  mahidInfo      : string = ''
 ): string {
 
   const tasteDNA = (() => {
@@ -248,6 +271,11 @@ If someone mocks you, tests you weirdly, asks something deliberately dumb, or tr
 
 ─── THE ONE RULE ───
 Respond to what was actually said. Not what you think they should hear. Not a generic film speech. Not a pivot to your comfort zone. What they actually said.
+${mahidInfo ? `
+─── LIVE KNOWLEDGE BASE ───
+The following facts were pulled live from a trusted source right before this conversation. Accept every statement below as true. Weave them naturally into conversation when relevant — never recite them robotically, never say "according to my knowledge base". Just know them like you'd know a close friend's life.
+
+${mahidInfo}` : ''}
 `.trim()
 }
 
@@ -394,9 +422,12 @@ serve(async (req) => {
     const greeting             = isSimpleGreeting(userPrompt)
     const maxTokens            = greeting ? 250 : 2048
 
+    // ── Fetch live knowledge base (non-blocking, fails silently) ─────────────
+    const mahidInfo = await fetchKnowledgeBase()
+
     // ── System prompt ─────────────────────────────────────────────────────────
     const systemPrompt = buildSystemPrompt(
-      userMemory, isVerifiedMahid, isImposter, spoilerMode, greeting, watchedList, watchlistList
+      userMemory, isVerifiedMahid, isImposter, spoilerMode, greeting, watchedList, watchlistList, mahidInfo
     )
 
     // ── If asking about Mahid — force the answer as conversation opener ───────
@@ -474,15 +505,55 @@ serve(async (req) => {
       if (geminiRes.status === 429) {
         let msg = "My cinematic brain is cooked from requests 🧊 Give me 60 seconds to reset."
         try {
-          const errDump = JSON.stringify(JSON.parse(errText)).toLowerCase()
-          if (errDump.includes('per_day') || errDump.includes('requests_per_day')) {
-            const now = new Date(), reset = new Date()
+          const errJson = JSON.parse(errText)
+          const errDump = JSON.stringify(errJson).toLowerCase()
+
+          // Try to extract retryDelay from Google's RetryInfo detail
+          let retrySeconds = 0
+          const details: any[] = errJson?.error?.details || []
+          for (const d of details) {
+            if (d['@type']?.includes('RetryInfo') && d.retryDelay) {
+              retrySeconds = parseInt(d.retryDelay.replace(/\D/g, ''), 10) || 0
+              break
+            }
+          }
+
+          if (errDump.includes('per_day') || errDump.includes('requests_per_day') || errDump.includes('rpd')) {
+            // Daily limit — resets at midnight Pacific = 08:00 UTC
+            const now   = new Date()
+            const reset = new Date()
             reset.setUTCHours(8, 0, 0, 0)
             if (reset <= now) reset.setUTCDate(reset.getUTCDate() + 1)
-            const h = Math.ceil((reset.getTime() - now.getTime()) / 3600000)
-            msg = `Daily cinema quota maxed 📽️ Brain resets in ~${h}h. Come back then — I'll be ready.`
+            const diffMs  = reset.getTime() - now.getTime()
+            const diffH   = Math.floor(diffMs / 3600000)
+            const diffM   = Math.floor((diffMs % 3600000) / 60000)
+            // Format reset time in user-friendly local string (UTC label)
+            const resetHH = String(reset.getUTCHours()).padStart(2, '0')
+            const resetMM = String(reset.getUTCMinutes()).padStart(2, '0')
+            const waitStr = diffH > 0 ? `${diffH}h ${diffM}m` : `${diffM}m`
+            msg = `Daily limit hit 📽️ I reset at ${resetHH}:${resetMM} UTC — that's in ${waitStr}. Come back then, I'll be ready.`
+          } else if (errDump.includes('rpm') || errDump.includes('requests_per_minute')) {
+            if (retrySeconds > 0) {
+              const m = Math.ceil(retrySeconds / 60)
+              msg = m <= 1
+                ? `Too many requests right now 🧠 Give me about a minute and hit me again.`
+                : `Request limit hit — I need ${m} minutes to breathe. Back at ${getTimeInMinutes(retrySeconds)}.`
+            } else {
+              msg = "Too many requests right now 🧠 Give me 60 seconds and I'm back."
+            }
           } else if (errDump.includes('tpm') || errDump.includes('tokens_per_minute')) {
-            msg = "Yo you maxed my token capacity 🧠 That prompt was a lot. 60 seconds and I'm back."
+            if (retrySeconds > 0) {
+              msg = `Token limit hit 🧠 I need ${retrySeconds}s to reset. Try again at ${getTimeInMinutes(retrySeconds)}.`
+            } else {
+              msg = "Token capacity maxed 🧠 That was a big one. 60 seconds and I'm back."
+            }
+          } else if (retrySeconds > 0) {
+            // Fallback: we have a retry delay but don't know the specific limit type
+            const secs = retrySeconds
+            const timeStr = getTimeInMinutes(secs)
+            msg = secs < 60
+              ? `Quota hit — try again in ${secs} seconds (around ${timeStr}).`
+              : `Quota hit — I need ${Math.ceil(secs / 60)} minutes. Try again around ${timeStr}.`
           }
         } catch { /* keep default */ }
         return new Response(
