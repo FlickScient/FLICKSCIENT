@@ -314,6 +314,15 @@ export default function FlickScient({ myList }) {
     typingIntervalRef.current = setTimeout(tick, 30);
   }, []);
 
+  const invokeFlickScient = async (body, retries = 2) => {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      const { data, error: fnError } = await supabase.functions.invoke('flick-scientist-bot', { body });
+      if (!fnError) return { data };
+      if (attempt < retries) await new Promise(r => setTimeout(r, 1500));
+      if (attempt === retries) throw fnError;
+    }
+  };
+
   const sendMessage = async (text) => {
     if (!text.trim() || loading) return;
     const userQuery = text.trim();
@@ -330,10 +339,11 @@ export default function FlickScient({ myList }) {
         watchedTitles   ? `Watched: ${watchedTitles}`   : '',
         watchlistTitles ? `Watchlist: ${watchlistTitles}` : '',
       ].filter(Boolean).join(' | ');
-      const { data, error: fnError } = await supabase.functions.invoke('flick-scientist-bot', {
-        body: { prompt: `[Library: ${libraryContext || 'empty'}] ${userQuery}`, userId, conversationHistory },
+      const { data } = await invokeFlickScient({
+        prompt: `[Library: ${libraryContext || 'empty'}] ${userQuery}`,
+        userId,
+        conversationHistory,
       });
-      if (fnError) throw fnError;
       const aiText = data?.message || "My vision is a bit blurry. Try again?";
       setLoading(false);
       animateText(aiText, String(Date.now() + 1));
