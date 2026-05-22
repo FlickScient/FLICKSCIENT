@@ -133,7 +133,7 @@ function LoginScreen() {
     setLoading(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: 'https://moviesyncfs.vercel.app' },
+      options: { redirectTo: window.location.origin + '/?login=google' },
     });
     if (error) { setMsg({ text: error.message, ok: false }); setLoading(false); }
   };
@@ -1795,22 +1795,28 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-  supabase.auth.exchangeCodeForSession(window.location.search)
-    .catch(() => {})
-    .finally(() => {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setUser(session?.user ?? null)
-        cleanAuthHash()
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search)
+  const code = params.get('code')
+  if (code) {
+    supabase.auth.exchangeCodeForSession(window.location.search)
+      .then(({ data }) => {
+        if (data?.session) setUser(data.session.user)
       })
+      .catch(() => {})
+  } else {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      cleanAuthHash()
     })
+  }
   const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
     setUser(session?.user ?? null)
     cleanAuthHash()
   })
   return () => subscription.unsubscribe()
-}, []);
-
+}, [])
+  
   useEffect(() => {
     const onHashChange = () => setViewState(getViewFromHash());
     window.addEventListener('hashchange', onHashChange);
