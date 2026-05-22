@@ -51,6 +51,14 @@ function fmtDate(ts) {
   return d.toLocaleDateString('en',{month:'short',day:'numeric'});
 }
 
+function parseBoldTitles(text) {
+  const matches = [];
+  const regex = /\*\*([^*]+)\*\*/g;
+  let m;
+  while ((m = regex.exec(text)) !== null) matches.push(m[1]);
+  return [...new Set(matches)];
+}
+
 // ─── Sync Room Utilities ──────────────────────────────────────────────────────
 function encodePrefs(myList) {
   const watched = myList.filter(m => m.watched || m.status === 'watched');
@@ -195,6 +203,33 @@ function SyncRoom({ myList, onSendToAI }) {
   return null;
 }
 
+// ─── Movie Quick Add Card ─────────────────────────────────────────────────────
+function MovieQuickAdd({ title }) {
+  const [wlDone, setWlDone] = useState(false);
+  const [wDone,  setWDone]  = useState(false);
+
+  const add = async (status, watched) => {
+    const { error } = await supabase.from('movies').insert({ title, status, watched, type: 'Movie' });
+    if (!error) { if (status === 'watchlist') setWlDone(true); else setWDone(true); }
+  };
+
+  return (
+    <div className="bg-[#16161f] border border-white/[0.06] rounded-xl px-3 py-2 flex items-center gap-2">
+      <span className="text-[11px] text-gray-400 font-bold truncate flex-1">🎬 {title}</span>
+      <div className="flex gap-1.5 flex-shrink-0">
+        <button onClick={() => add('watchlist', false)} disabled={wlDone || wDone}
+          className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all active:scale-95 ${wlDone ? 'bg-blue-500/20 text-blue-400 border border-blue-500/20' : 'bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20'}`}>
+          {wlDone ? '✓ Added' : '+ Watchlist'}
+        </button>
+        <button onClick={() => add('watched', true)} disabled={wDone || wlDone}
+          className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all active:scale-95 ${wDone ? 'bg-green-500/20 text-green-400 border border-green-500/20' : 'bg-green-500/10 border border-green-500/20 text-green-400 hover:bg-green-500/20'}`}>
+          {wDone ? '✓ Logged' : '👁 Watched'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 const WELCOME_MSG = {
   id: 'welcome', sender: 'ai',
@@ -258,15 +293,17 @@ export default function FlickScient({ myList }) {
   const sendMessage = async (text) => {
     if (!text.trim() || loading) return;
     const userQuery = text.trim();
+    const conversationHistory = messages
+      .filter(m => m.id !== 'welcome')
+      .slice(-20)
+      .map(m => ({ role: m.sender === 'user' ? 'user' : 'model', content: m.text }));
     setMessages(prev => [...prev, { id: Date.now().toString(), sender: 'user', text: userQuery }]);
     setLoading(true);
     try {
-      // getSession() reads localStorage — no network call, never throws
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id || null;
-      // functions.invoke() is the correct Supabase way — handles CORS + auth properly
       const { data, error: fnError } = await supabase.functions.invoke('flick-scientist-bot', {
-        body: { prompt: `My Library: ${watchedTitles}. User Message: ${userQuery}`, userId },
+        body: { prompt: `My Library: ${watchedTitles}. User Message: ${userQuery}`, userId, conversationHistory },
       });
       if (fnError) throw fnError;
       const aiText = data?.message || "My vision is a bit blurry. Try again?";
@@ -436,18 +473,27 @@ export default function FlickScient({ myList }) {
                 <p className="text-red-300 leading-relaxed">{adminDetail}</p>
               </div>
             );
+            const boldTitles = msg.sender === 'ai' && msg.id !== 'welcome' && msg.text.length > 0 && !msg.text.startsWith('⚙️')
+              ? parseBoldTitles(msg.text) : [];
             return (
-            <div key={msg.id} className={`flex items-start gap-3 ${msg.sender==='user' ? 'flex-row-reverse' : ''}`}>
-              <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-xs border shadow-lg ${msg.sender==='user' ? 'bg-purple-500 border-purple-400 text-white font-black' : 'bg-[#16161d] border-purple-500/30 text-purple-400'}`}>
-                {msg.sender==='user' ? <User size={15} /> : <Sparkles size={15} />}
+            <div key={msg.id}>
+              <div className={`flex items-start gap-3 ${msg.sender==='user' ? 'flex-row-reverse' : ''}`}>
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-xs border shadow-lg ${msg.sender==='user' ? 'bg-purple-500 border-purple-400 text-white font-black' : 'bg-[#16161d] border-purple-500/30 text-purple-400'}`}>
+                  {msg.sender==='user' ? <User size={15} /> : <Sparkles size={15} />}
+                </div>
+                <div className={`flex-1 p-4 rounded-2xl text-[13px] leading-relaxed border whitespace-pre-wrap select-text ${msg.sender==='user' ? 'bg-[#1a1a24] text-gray-100 border-white/5 font-medium rounded-tr-none ml-6' : 'bg-gradient-to-b from-[#121218] to-[#0f0f14] text-gray-200 border-white/5 rounded-tl-none mr-6 shadow-md'}`}>
+                  {msg.text.split(/(\*\*[^*]+\*\*)/).map((part, i) =>
+                    part.startsWith('**') && part.endsWith('**')
+                      ? <strong key={i} className="text-yellow-400 font-black">{part.slice(2,-2)}</strong>
+                      : part
+                  )}
+                </div>
               </div>
-              <div className={`flex-1 p-4 rounded-2xl text-[13px] leading-relaxed border whitespace-pre-wrap select-text ${msg.sender==='user' ? 'bg-[#1a1a24] text-gray-100 border-white/5 font-medium rounded-tr-none ml-6' : 'bg-gradient-to-b from-[#121218] to-[#0f0f14] text-gray-200 border-white/5 rounded-tl-none mr-6 shadow-md'}`}>
-                {msg.text.split(/(\*\*[^*]+\*\*)/).map((part, i) =>
-                  part.startsWith('**') && part.endsWith('**')
-                    ? <strong key={i} className="text-yellow-400 font-black">{part.slice(2,-2)}</strong>
-                    : part
-                )}
-              </div>
+              {boldTitles.length > 0 && msg.id !== typingMsgId && (
+                <div className="ml-11 mr-6 mt-1.5 space-y-1.5">
+                  {boldTitles.map(title => <MovieQuickAdd key={title} title={title} />)}
+                </div>
+              )}
             </div>
             );
           })}
