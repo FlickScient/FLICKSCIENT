@@ -1910,9 +1910,11 @@ useEffect(() => {
     })
   }
   const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-    setUser(session?.user ?? null)
-    cleanAuthHash()
-  })
+  setUser(session?.user ?? null);
+  if (session) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+});
   return () => subscription.unsubscribe()
 }, [])
   
