@@ -23,29 +23,55 @@ const MOOD_PILLS = [
   { emoji: '⚡', label: 'Hype Mode',     prompt: 'Give me the most hype, high-energy, adrenaline-pumping film possible. Something that gets the blood pumping.' },
 ];
 
-// ─── Chat History Utils ───────────────────────────────────────────────────────
-const SESSIONS_KEY = 'fs_chat_sessions';
+// ─── Chat History Utils (Supabase) ───────────────────────────────────────────
+// SQL to run once in Supabase:
+// create table if not exists flickscient_conversations (
+//   id uuid primary key default gen_random_uuid(),
+//   user_id uuid not null references auth.users(id) on delete cascade,
+//   session_id text not null,
+//   title text,
+//   messages jsonb not null default '[]',
+//   created_at timestamptz default now(),
+//   updated_at timestamptz default now(),
+//   unique(user_id, session_id)
+// );
+
 const MAX_SESSIONS = 40;
-
-function loadSessions() {
-  try { return JSON.parse(localStorage.getItem(SESSIONS_KEY) || '[]'); } catch { return []; }
-}
-
-function saveSession(session) {
-  try {
-    const all = loadSessions().filter(s => s.id !== session.id);
-    localStorage.setItem(SESSIONS_KEY, JSON.stringify([session, ...all].slice(0, MAX_SESSIONS)));
-  } catch {}
-}
-
-function deleteSessionById(id) {
-  try { localStorage.setItem(SESSIONS_KEY, JSON.stringify(loadSessions().filter(s => s.id !== id))); } catch {}
-}
 
 function sessionTitle(messages) {
   const first = messages.find(m => m.sender === 'user');
   if (!first) return 'New chat';
   return first.text.length > 50 ? first.text.slice(0, 50) + '…' : first.text;
+}
+
+async function loadSupabaseSessions(userId) {
+  const { data } = await supabase
+    .from('flickscient_conversations')
+    .select('session_id, title, messages, updated_at')
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false })
+    .limit(MAX_SESSIONS);
+  return (data || []).map(row => ({
+    id: row.session_id,
+    title: row.title || 'New chat',
+    messages: row.messages || [],
+    updatedAt: new Date(row.updated_at).getTime(),
+  }));
+}
+
+async function saveSupabaseSession(userId, session) {
+  await supabase.from('flickscient_conversations').upsert({
+    user_id:    userId,
+    session_id: session.id,
+    title:      session.title,
+    messages:   session.messages,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'user_id,session_id' });
+}
+
+async function deleteSupabaseSession(userId, sessionId) {
+  await supabase.from('flickscient_conversations')
+    .delete().eq('user_id', userId).eq('session_id', sessionId);
 }
 
 function fmtDate(ts) {
@@ -210,7 +236,7 @@ function SyncRoom({ myList, onSendToAI }) {
 }
 
 // ─── Movie Detail Sheet ───────────────────────────────────────────────────────
-function MovieDetailSheet({ title, onClose }) {
+function MovieDetailSheet({ title, onClose, myList = [] }) {
   const [movie,   setMovie]   = useState(null);
   const [busy,    setBusy]    = useState(true);
   const [added,   setAdded]   = useState(null); // 'watchlist' | 'watched'
@@ -267,6 +293,12 @@ function MovieDetailSheet({ title, onClose }) {
     : null;
 
   const voteAvg = movie?.vote_average ? movie.vote_average.toFixed(1) : null;
+
+  const existingEntry      = movie ? myList.find(m =>
+    (movie.id && m.tmdb_id === movie.id) ||
+    m.title?.toLowerCase() === movie.displayTitle?.toLowerCase()) : null;
+  const alreadyWatched     = !!(existingEntry?.watched || existingEntry?.status === 'watched');
+  const alreadyWatchlisted = existingEntry?.status === 'watchlist';
 
   return (
     <div className="fixed inset-0 z-[90] flex items-end" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -352,23 +384,31 @@ function MovieDetailSheet({ title, onClose }) {
                 </div>
               )}
 
-              {/* Action buttons */}
-              {added ? (
-                <div className={`w-full py-3.5 rounded-2xl text-center text-sm font-black border ${added === 'watchlist' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : 'bg-green-500/20 text-green-400 border-green-500/30'}`}>
-                  {added === 'watchlist' ? '✓ Added to Watchlist' : '✓ Marked as Watched'}
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <button onClick={() => save('watchlist', false)}
-                    className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-400 font-black text-sm hover:bg-blue-500/20 active:scale-[0.98] transition-all">
-                    <Bookmark size={15} /> Watchlist
-                  </button>
-                  <button onClick={() => save('watched', true)}
-                    className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-green-500/10 border border-green-500/30 text-green-400 font-black text-sm hover:bg-green-500/20 active:scale-[0.98] transition-all">
-                    <Eye size={15} /> Watched
-                  </button>
-                </div>
-              )}
+              {/* Action buttons — independently disabled by their own status */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => !alreadyWatchlisted && added !== 'watchlist' && save('watchlist', false)}
+                  disabled={alreadyWatchlisted || added === 'watchlist'}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl border font-black text-sm transition-all active:scale-[0.98] ${
+                    alreadyWatchlisted || added === 'watchlist'
+                      ? 'bg-blue-500/20 text-blue-400 border-blue-500/30 opacity-80 cursor-not-allowed'
+                      : 'bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20'
+                  }`}>
+                  <Bookmark size={15} fill={alreadyWatchlisted || added === 'watchlist' ? 'currentColor' : 'none'} />
+                  {alreadyWatchlisted || added === 'watchlist' ? '✓ Watchlist' : 'Watchlist'}
+                </button>
+                <button
+                  onClick={() => !alreadyWatched && added !== 'watched' && save('watched', true)}
+                  disabled={alreadyWatched || added === 'watched'}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl border font-black text-sm transition-all active:scale-[0.98] ${
+                    alreadyWatched || added === 'watched'
+                      ? 'bg-green-500/20 text-green-400 border-green-500/30 opacity-80 cursor-not-allowed'
+                      : 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20'
+                  }`}>
+                  <Eye size={15} />
+                  {alreadyWatched || added === 'watched' ? '✓ Watched' : 'Watched'}
+                </button>
+              </div>
 
               {/* Cast */}
               {movie.cast?.length > 0 && (
@@ -420,31 +460,41 @@ export default function FlickScient({ myList }) {
   const [messages,       setMessages]       = useState([WELCOME_MSG]);
   const [input,          setInput]          = useState('');
   const [loading,        setLoading]        = useState(false);
+  const [isStreaming,    setIsStreaming]     = useState(false);
   const [aiTab,          setAiTab]          = useState('chat');
   const [sessionId,      setSessionId]      = useState(() => 'sid_' + Date.now());
-  const [sessions,       setSessions]       = useState(() => loadSessions());
+  const [sessions,       setSessions]       = useState([]);
   const [selectedMovie,  setSelectedMovie]  = useState(null);
   const chatBottomRef    = useRef(null);
   const textareaRef      = useRef(null);
-  const typingIntervalRef = useRef(null);
-  const [typingMsgId, setTypingMsgId] = useState(null);
+  const currentUserIdRef = useRef(null);
 
   useEffect(() => { chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
 
-  // Auto-save session whenever messages change
+  // Load sessions from Supabase on mount
   useEffect(() => {
-    if (messages.some(m => m.sender === 'user')) {
-      const session = {
-        id: sessionId,
-        title: sessionTitle(messages),
-        messages,
-        createdAt: parseInt(sessionId.replace('sid_', '')),
-        updatedAt: Date.now(),
-      };
-      saveSession(session);
-      setSessions(loadSessions());
-    }
-  }, [messages, sessionId]);
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+      currentUserIdRef.current = session.user.id;
+      const loaded = await loadSupabaseSessions(session.user.id);
+      setSessions(loaded);
+    })();
+  }, []);
+
+  // Save to Supabase only after streaming completes (isStreaming → false triggers this)
+  useEffect(() => {
+    if (isStreaming) return;
+    if (!messages.some(m => m.sender === 'user')) return;
+    const userId = currentUserIdRef.current;
+    if (!userId) return;
+    const sess = { id: sessionId, title: sessionTitle(messages), messages };
+    saveSupabaseSession(userId, sess).catch(() => {});
+    setSessions(prev => {
+      const filtered = prev.filter(s => s.id !== sessionId);
+      return [{ ...sess, updatedAt: Date.now() }, ...filtered].slice(0, MAX_SESSIONS);
+    });
+  }, [messages, sessionId, isStreaming]);
 
   const adjustHeight = useCallback(() => {
     const el = textareaRef.current;
@@ -455,42 +505,6 @@ export default function FlickScient({ myList }) {
 
   const watchedTitles   = myList.filter(m => m.watched || m.status === 'watched').map(m => m.title).join(', ');
   const watchlistTitles = myList.filter(m => m.status === 'watchlist').map(m => m.title).join(', ');
-
-  const animateText = useCallback((fullText, msgId) => {
-    if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
-    const words = fullText.split(' ');
-    let idx = 0;
-    setMessages(prev => [...prev, { id: msgId, sender: 'ai', text: '' }]);
-    setTypingMsgId(msgId);
-
-    const tick = () => {
-      idx++;
-      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: words.slice(0, idx).join(' ') } : m));
-      if (idx >= words.length) {
-        setTypingMsgId(null);
-        return;
-      }
-      const word = words[idx - 1] || '';
-      const delay = word.endsWith('.') || word.endsWith('!') || word.endsWith('?')
-        ? 180
-        : word.endsWith(',') || word.endsWith('—')
-        ? 80
-        : Math.random() < 0.08 ? 120
-        : 22;
-      typingIntervalRef.current = setTimeout(tick, delay);
-    };
-
-    typingIntervalRef.current = setTimeout(tick, 30);
-  }, []);
-
-  const invokeFlickScient = async (body, retries = 2) => {
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      const { data, error: fnError } = await supabase.functions.invoke('flick-scientist-bot', { body });
-      if (!fnError) return { data };
-      if (attempt < retries) await new Promise(r => setTimeout(r, 1500));
-      if (attempt === retries) throw fnError;
-    }
-  };
 
   const sendMessage = async (text) => {
     if (!text.trim() || loading) return;
@@ -504,25 +518,44 @@ export default function FlickScient({ myList }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id || null;
-      const { data } = await invokeFlickScient({
-        prompt: userQuery,
-        userId,
-        conversationHistory,
-        watched:   watchedTitles   || '',
-        watchlist: watchlistTitles || '',
-      });
-      const aiText = data?.message || "My vision is a bit blurry. Try again?";
+      if (userId) currentUserIdRef.current = userId;
+      const authToken = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/flick-scientist-bot`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ prompt: userQuery, userId, conversationHistory, watched: watchedTitles || '', watchlist: watchlistTitles || '' }),
+        }
+      );
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.message || `Request failed (${response.status})`);
+      }
+      const msgId = String(Date.now() + 1);
       setLoading(false);
-      animateText(aiText, String(Date.now() + 1));
+      setMessages(prev => [...prev, { id: msgId, sender: 'ai', text: '' }]);
+      setIsStreaming(true);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        fullText += chunk;
+        setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: fullText } : m));
+      }
+      setIsStreaming(false);
     } catch (error) {
       let errMsg = "Something broke on my end — try again in a sec. 🛠️";
-      try {
-        if (error?.context) {
-          const body = await error.context.json();
-          if (body?.message) errMsg = body.message;
-        }
-      } catch {}
+      if (error?.message) errMsg = error.message;
       setLoading(false);
+      setIsStreaming(false);
       setMessages(prev => [...prev, { id: 'err-' + Date.now(), sender: 'ai', text: errMsg }]);
     }
   };
@@ -551,11 +584,11 @@ export default function FlickScient({ myList }) {
     setAiTab('chat');
   };
 
-  const removeSession = (e, id) => {
+  const removeSession = async (e, id) => {
     e.stopPropagation();
-    deleteSessionById(id);
-    const updated = loadSessions();
-    setSessions(updated);
+    const userId = currentUserIdRef.current;
+    if (userId) deleteSupabaseSession(userId, id).catch(() => {});
+    setSessions(prev => prev.filter(s => s.id !== id));
     if (id === sessionId) startNewChat();
   };
 
@@ -755,7 +788,7 @@ export default function FlickScient({ myList }) {
       </>}
 
       {selectedMovie && (
-        <MovieDetailSheet title={selectedMovie} onClose={() => setSelectedMovie(null)} />
+        <MovieDetailSheet title={selectedMovie} onClose={() => setSelectedMovie(null)} myList={myList} />
       )}
     </div>
   );

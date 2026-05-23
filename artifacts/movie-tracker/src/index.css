@@ -320,3 +320,56 @@
     inset: -1px;
   }
 }
+
+/* ─── LIGHT MODE ─────────────────────────────────────────────────────────────── */
+html.light { color-scheme: light; }
+
+html.light .bg-\[\#0a0a0c\],
+html.light .bg-\[\#0d0d12\]  { background-color: #fff9f4 !important; color: #1c1005; }
+html.light .bg-\[\#0f0f13\]  { background-color: #faf4ea !important; }
+html.light .bg-\[\#111116\]  { background-color: #f5ede0 !important; }
+html.light .bg-\[\#121218\]  { background-color: #f2e8db !important; }
+html.light .bg-\[\#12121a\]  { background-color: #f2e8db !important; }
+html.light .bg-\[\#16161d\]  { background-color: #ebe3d4 !important; }
+html.light .bg-\[\#1a1a24\]  { background-color: #e3d9c8 !important; }
+html.light .bg-\[\#1c1c26\]  { background-color: #ddd3be !important; }
+
+/* Text */
+html.light .text-white         { color: #1c1005 !important; }
+html.light .text-gray-100      { color: #2c2010 !important; }
+html.light .text-gray-200      { color: #3c3018 !important; }
+html.light .text-gray-300      { color: #5c4c28 !important; }
+html.light .text-gray-400      { color: #786040 !important; }
+html.light .text-gray-500      { color: #9a8060 !important; }
+html.light .text-gray-600      { color: #b09878 !important; }
+html.light .text-gray-700      { color: #c8b490 !important; }
+html.light .text-gray-800      { color: #d8c8a8 !important; }
+
+/* Borders */
+html.light .border-white\/5    { border-color: rgba(110, 70, 20, 0.13) !important; }
+html.light .border-white\/10   { border-color: rgba(110, 70, 20, 0.18) !important; }
+html.light .border-white\/\[0\.06\] { border-color: rgba(110, 70, 20, 0.10) !important; }
+html.light .border-gray-800    { border-color: rgba(110, 70, 20, 0.20) !important; }
+
+/* Inputs */
+html.light input, html.light textarea {
+  background-color: #ede5d4 !important;
+  color: #1c1005 !important;
+  border-color: rgba(110, 70, 20, 0.18) !important;
+}
+html.light input::placeholder,
+html.light textarea::placeholder { color: #a08860 !important; }
+
+/* Overlay / backdrop */
+html.light .bg-black\/60  { background-color: rgba(80, 50, 10, 0.55) !important; }
+html.light .bg-black\/75  { background-color: rgba(80, 50, 10, 0.70) !important; }
+html.light .bg-black\/50  { background-color: rgba(80, 50, 10, 0.45) !important; }
+
+/* Amber/orange accents stay warm */
+html.light .text-yellow-400    { color: #d97706 !important; }
+html.light .text-yellow-500    { color: #b45309 !important; }
+html.light .text-yellow-600    { color: #92400e !important; }
+html.light .text-yellow-700    { color: #78350f !important; }
+html.light .text-yellow-800    { color: #78350f !important; }
+html.light .bg-yellow-500      { background-color: #f97316 !important; }
+html.light .hover\:bg-yellow-400:hover { background-color: #fb923c !important; }

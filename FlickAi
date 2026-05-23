@@ -461,7 +461,7 @@ serve(async (req) => {
     let geminiRes: Response
     try {
       geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
         {
           method : 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -572,30 +572,54 @@ serve(async (req) => {
       throw new Error(`Gemini error: ${geminiRes.status}`)
     }
 
-    const geminiData = await geminiRes.json()
-    const geminiText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text
+    // ── Stream the response back to the client word-by-word ───────────────────
+    const encoder  = new TextEncoder()
+    let   fullText = ''
 
-    if (!geminiText) {
-      return new Response(
-        JSON.stringify({ message: "Signal dropped. Hit me again and I'll be right there. 🎬" }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    const stream = new ReadableStream({
+      async start(ctrl) {
+        try {
+          // Stream mahidOpener first if present
+          if (mahidOpener) {
+            fullText += mahidOpener
+            ctrl.enqueue(encoder.encode(mahidOpener))
+          }
 
-    // Prepend the forced Mahid opener to the final message
-    const aiMessage = mahidOpener ? `${mahidOpener}${geminiText}` : geminiText
+          const reader  = geminiRes.body!.getReader()
+          const decoder = new TextDecoder()
+          let   buf     = ''
 
-    // ── Fire-and-forget memory update ─────────────────────────────────────────
-    if (hashedUserId && supabase) {
-      const nextRefCount = Math.min((userMemory?.memory_reference_count || 0) + 1, MAX_MEMORY_REFS + 1)
-      updateUserMemory(supabase, hashedUserId, userPrompt, aiMessage, userMemory || {}, apiKey, nextRefCount)
-        .catch(e => console.error('[FlickScient] Memory update failed:', e))
-    }
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buf += decoder.decode(value, { stream: true })
+            const lines = buf.split('\n')
+            buf = lines.pop() ?? ''
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue
+              const raw = line.slice(6).trim()
+              if (!raw || raw === '[DONE]') continue
+              try {
+                const json = JSON.parse(raw)
+                const text = json.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+                if (text) { fullText += text; ctrl.enqueue(encoder.encode(text)) }
+              } catch { /* skip malformed SSE chunk */ }
+            }
+          }
+        } finally {
+          ctrl.close()
+          if (hashedUserId && supabase && fullText) {
+            const nextRefCount = Math.min((userMemory?.memory_reference_count || 0) + 1, MAX_MEMORY_REFS + 1)
+            updateUserMemory(supabase, hashedUserId, userPrompt, fullText, userMemory || {}, apiKey, nextRefCount)
+              .catch(e => console.error('[FlickScient] Memory update failed:', e))
+          }
+        }
+      },
+    })
 
-    return new Response(
-      JSON.stringify({ message: aiMessage }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return new Response(stream, {
+      headers: { ...corsHeaders, 'Content-Type': 'text/plain; charset=utf-8' },
+    })
 
   } catch (error: any) {
     console.error('[FlickScient] Fatal error:', error.message)

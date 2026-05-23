@@ -7,6 +7,7 @@ import {
   ChevronRight, BarChart2, Clock, Zap, Award, Download,
   Bookmark, Menu, Settings, User, ChevronDown, ChevronUp,
   PlayCircle, TvMinimal, Clapperboard, RefreshCw, Sparkles,
+  Sun, Moon,
 } from 'lucide-react';
 import FlickScient from './FlickScient';
 
@@ -250,7 +251,7 @@ function LoginScreen() {
 }
 
 // ─── Drawer Menu ──────────────────────────────────────────────────────────────
-function DrawerMenu({ open, onClose, user, onLogout, onOpenSeed }) {
+function DrawerMenu({ open, onClose, user, onLogout, onOpenSeed, lightMode, onToggleLight }) {
   const email = user?.email || '';
   const initials = email ? email[0].toUpperCase() : '?';
   return (
@@ -275,6 +276,14 @@ function DrawerMenu({ open, onClose, user, onLogout, onOpenSeed }) {
 
         {/* Menu items */}
         <div className="flex-1 px-4 py-4 space-y-1">
+          <button onClick={onToggleLight}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-white/5 transition-colors text-left">
+            <span className={lightMode ? 'text-amber-500' : 'text-blue-400'}>{lightMode ? <Sun size={18} /> : <Moon size={18} />}</span>
+            <div>
+              <p className="text-sm font-bold text-white">{lightMode ? 'Light Mode' : 'Dark Mode'}</p>
+              <p className="text-[10px] text-gray-600">{lightMode ? 'Tap to switch to dark' : 'Tap to switch to light'}</p>
+            </div>
+          </button>
           <DrawerItem icon={<Download size={18} />} label="Import 500 Films" sub="Seed your library from TMDB" onClick={() => { onOpenSeed(); onClose(); }} />
           <DrawerItem icon={<Settings size={18} />} label="Settings" sub="Preferences & account" onClick={() => { alert('Settings coming soon!'); onClose(); }} />
           <DrawerItem icon={<User size={18} />} label="Profile" sub={email} onClick={onClose} />
@@ -598,7 +607,7 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
   const isAddedWL  = (item) => addedWL.has(item.id)  || existingTitles.has((item.title || item.name || '').toLowerCase() + ':wl');
   const isAnyAdded = (item) => isAddedLib(item) || isAddedWL(item);
 
-  useEffect(() => { if (tab === 'discover' && !trendingLoaded) loadTrending(); }, [tab]);
+  useEffect(() => { if (tab === 'discover') loadTrending(); }, [tab]);
 
   const loadTrending = async () => {
     setTrendingLoading(true);
@@ -741,7 +750,7 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
               <p className="text-xs text-gray-600 uppercase tracking-widest font-black">Trending Today</p>
               <p className="text-[10px] text-gray-700 mt-0.5">Updated daily · Movies & Series</p>
             </div>
-            <button onClick={() => { setTrendingLoaded(false); loadTrending(); }}
+            <button onClick={() => loadTrending()}
               className="flex items-center gap-1.5 text-[10px] text-yellow-600 font-bold border border-yellow-600/30 px-3 py-1.5 rounded-full hover:bg-yellow-500/10 transition-colors">
               <RefreshCw size={11} /> Refresh
             </button>
@@ -1146,7 +1155,7 @@ function StatsPage({ movies }) {
             <div className="flex-1 space-y-3">
               <div><div className="text-2xl font-black text-white">{watched.length}</div><div className="text-[9px] text-gray-600 uppercase tracking-wider">Films Watched</div></div>
               <div><div className="text-lg font-black text-blue-400">{watchlist.length}</div><div className="text-[9px] text-gray-600 uppercase tracking-wider">In Watchlist</div></div>
-              <div><div className="text-lg font-black text-yellow-500">{watchHours}h</div><div className="text-[9px] text-gray-600 uppercase tracking-wider">Est. Watch Time</div></div>
+              <div><div className="text-lg font-black text-yellow-500">{watchHours}h <span className="text-sm font-bold text-amber-600/70">· {watchDays}d</span></div><div className="text-[9px] text-gray-600 uppercase tracking-wider">Est. Watch Time</div></div>
             </div>
           </div>
         </div>
@@ -1785,6 +1794,12 @@ export default function App() {
   const [view,        setViewState]  = useState(getViewFromHash);
   const [showSeed,    setShowSeed]   = useState(false);
   const [drawerOpen,  setDrawerOpen] = useState(false);
+  const [lightMode,   setLightMode]  = useState(() => localStorage.getItem('lm') === 'true');
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('light', lightMode);
+    localStorage.setItem('lm', String(lightMode));
+  }, [lightMode]);
 
   const setView = (v) => {
     setViewState(v);
@@ -1867,7 +1882,8 @@ useEffect(() => {
   return (
     <>
       <DrawerMenu open={drawerOpen} onClose={() => setDrawerOpen(false)}
-        user={user} onLogout={() => supabase.auth.signOut()} onOpenSeed={() => setShowSeed(true)} />
+        user={user} onLogout={() => supabase.auth.signOut()} onOpenSeed={() => setShowSeed(true)}
+        lightMode={lightMode} onToggleLight={() => setLightMode(v => !v)} />
 
       {view === 'library' && (
         <LibraryPage movies={movies} onToggle={toggleStatus} onRate={rateMovie} onDelete={deleteMovie}
