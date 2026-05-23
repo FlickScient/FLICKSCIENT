@@ -341,7 +341,7 @@ serve(async (req) => {
   }
 
   // ── Pull env vars up-front (never throws) ─────────────────────────────────
-  const apiKey       = Deno.env.get('GEMINI_API_KEY')
+  const apiKey       = Deno.env.get('GROQ_API_KEY')
   const sbUrl        = Deno.env.get('SUPABASE_URL')
   const sbKey        = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   const creatorEmail = (Deno.env.get('CREATOR_EMAIL') || '').toLowerCase().trim()
@@ -357,7 +357,7 @@ serve(async (req) => {
     const watchedList        = (body.watched   || '').trim()
     const watchlistList      = (body.watchlist || '').trim()
 
-    // ── Identify user + load memory first (works without GEMINI_API_KEY) ─────
+    // ── Identify user + load memory first (works without GROQ_API_KEY) ──────
     let hashedUserId: string | null = null
     if (rawUserId) {
       hashedUserId = await hashUserId(rawUserId)
@@ -405,7 +405,7 @@ serve(async (req) => {
     if (!apiKey) {
       return adminErr(
         isCreator,
-        'GEMINI_API_KEY secret is missing. Add it in Supabase → Edge Functions → Secrets, then redeploy.',
+        'GROQ_API_KEY secret is missing. Add it in Supabase → Edge Functions → Secrets, then redeploy.',
         "Hold on, be right back 🎬"
       )
     }
@@ -435,52 +435,49 @@ serve(async (req) => {
     // This makes dodging impossible — the answer is already written
     const mahidOpener = askingAboutMahid ? buildMahidAnswer(isVerifiedMahid) : ''
 
-    // ── Build multi-turn history for Gemini ───────────────────────────────────
+    // ── Build multi-turn history for Groq (OpenAI message format) ────────────
     const historyContents = conversationHistory
       .filter(m => m.content && m.content.trim())
       .map(m => ({
-        role : m.role === 'user' ? 'user' : 'model',
-        parts: [{ text: m.content }],
+        role   : m.role === 'user' ? 'user' : 'assistant',
+        content: m.content,
       }))
 
     const geminiContents = mahidOpener
       ? [
           ...historyContents,
-          { role: 'user',  parts: [{ text: userPrompt }] },
-          { role: 'model', parts: [{ text: mahidOpener }] },
+          { role: 'user',      content: userPrompt  },
+          { role: 'assistant', content: mahidOpener  },
         ]
       : [
           ...historyContents,
-          { role: 'user', parts: [{ text: userPrompt }] },
+          { role: 'user', content: userPrompt },
         ]
 
-    // ── Call Gemini ───────────────────────────────────────────────────────────
+    // ── Call Groq ─────────────────────────────────────────────────────────────
     const controller = new AbortController()
     const timeoutId  = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
 
     let geminiRes: Response
     try {
       geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
+        'https://api.groq.com/openai/v1/chat/completions',
         {
           method : 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type' : 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
           body   : JSON.stringify({
-            contents         : geminiContents,
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            tools            : [{ googleSearch: {} }],
-            generationConfig : {
-              temperature    : 1.05,
-              topP           : 0.97,
-              topK           : 50,
-              maxOutputTokens: maxTokens,
-            },
-            safetySettings: [
-              { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_ONLY_HIGH' },
-              { category: 'HARM_CATEGORY_HATE_SPEECH',       threshold: 'BLOCK_ONLY_HIGH' },
-              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
-              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
+            model      : 'llama-3.1-8b-instant',
+            messages   : [
+              { role: 'system', content: systemPrompt },
+              ...geminiContents,
             ],
+            stream     : true,
+            temperature: 1.05,
+            top_p      : 0.97,
+            max_tokens : maxTokens,
           }),
           signal: controller.signal,
         }
@@ -500,7 +497,7 @@ serve(async (req) => {
 
     if (!geminiRes.ok) {
       const errText = await geminiRes.text()
-      console.error(`[FlickScient] Gemini ${geminiRes.status}:`, errText)
+      console.error(`[FlickScient] Groq ${geminiRes.status}:`, errText)
 
       if (geminiRes.status === 429) {
         let msg = "My cinematic brain is cooked from requests 🧊 Give me 60 seconds to reset."
@@ -564,12 +561,12 @@ serve(async (req) => {
 
       if (geminiRes.status === 503) {
         return new Response(
-          JSON.stringify({ message: "Gemini's servers are slammed right now 🎬 Give it 30 seconds and hit me again." }),
+          JSON.stringify({ message: "Servers are slammed right now 🎬 Give it 30 seconds and hit me again." }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
-      throw new Error(`Gemini error: ${geminiRes.status}`)
+      throw new Error(`Groq error: ${geminiRes.status}`)
     }
 
     // ── Stream the response back to the client word-by-word ───────────────────
@@ -601,7 +598,7 @@ serve(async (req) => {
               if (!raw || raw === '[DONE]') continue
               try {
                 const json = JSON.parse(raw)
-                const text = json.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+                const text = json.choices?.[0]?.delta?.content ?? ''
                 if (text) { fullText += text; ctrl.enqueue(encoder.encode(text)) }
               } catch { /* skip malformed SSE chunk */ }
             }
@@ -648,13 +645,18 @@ async function updateUserMemory(
 
   try {
     const extractRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      'https://api.groq.com/openai/v1/chat/completions',
       {
         method : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type' : 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
         body   : JSON.stringify({
-          contents        : [{ parts: [{ text: extractionPrompt }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 600 },
+          model      : 'llama-3.1-8b-instant',
+          messages   : [{ role: 'user', content: extractionPrompt }],
+          temperature: 0.1,
+          max_tokens : 600,
         }),
         signal: controller.signal,
       }
@@ -664,7 +666,7 @@ async function updateUserMemory(
     if (!extractRes.ok) return
 
     const extractData = await extractRes.json()
-    const rawText     = extractData.candidates?.[0]?.content?.parts?.[0]?.text
+    const rawText     = extractData.choices?.[0]?.message?.content
     if (!rawText) return
 
     const jsonMatch = rawText.match(/\{[\s\S]*\}/)
