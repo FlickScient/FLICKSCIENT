@@ -383,3 +383,28 @@ html.light .text-yellow-700  { color: #78350f !important; }
 html.light .text-yellow-800  { color: #78350f !important; }
 html.light .bg-yellow-500    { background-color: #eab308 !important; }
 html.light .hover\:bg-yellow-400:hover { background-color: #facc15 !important; }
+
+/* ─── Card shadows — light mode only ────────────────────────────────────────── */
+html.light .bg-\[\#111116\],
+html.light .bg-\[\#111118\],
+html.light .rounded-3xl,
+html.light .rounded-2xl {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.07), 0 4px 14px rgba(0,0,0,0.05) !important;
+}
+
+/* ─── Film grain texture — dark mode only (dark is the default, light adds html.light) ── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9998;
+  opacity: 0.028;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grain)' opacity='1'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 180px 180px;
+  transition: opacity 0.3s ease;
+}
+html.light body::after {
+  opacity: 0;
+}

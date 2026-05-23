@@ -97,6 +97,24 @@ const TMDB_IMG  = (path, size = 'w500') => path ? `https://image.tmdb.org/t/p/${
 const TMDB_HEAD = { headers: { Authorization: `Bearer ${TMDB_TOKEN}` } };
 const tmdb      = (path) => fetch(`https://api.themoviedb.org/3${path}`, TMDB_HEAD).then(r => r.json());
 
+// ─── MovieSync Logo ───────────────────────────────────────────────────────────
+function MovieSyncLogo({ size = 32, className = '' }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+      {/* Film strip body */}
+      <rect x="1" y="6" width="30" height="20" rx="3" fill="currentColor" />
+      {/* Left perforations */}
+      <rect x="1"    y="9.5"  width="5.5" height="3.5" rx="0.8" fill="#0a0a0c" />
+      <rect x="1"    y="16.5" width="5.5" height="3.5" rx="0.8" fill="#0a0a0c" />
+      {/* Right perforations */}
+      <rect x="25.5" y="9.5"  width="5.5" height="3.5" rx="0.8" fill="#0a0a0c" />
+      <rect x="25.5" y="16.5" width="5.5" height="3.5" rx="0.8" fill="#0a0a0c" />
+      {/* Play triangle */}
+      <path d="M13.5 13L21 16L13.5 19V13Z" fill="#0a0a0c" />
+    </svg>
+  );
+}
+
 // ─── Login ────────────────────────────────────────────────────────────────────
 function LoginScreen() {
   const [mode, setMode]         = useState('login');
@@ -149,7 +167,7 @@ function LoginScreen() {
         {/* Branding */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center mx-auto mb-4 shadow-[0_0_40px_rgba(234,179,8,0.12)]">
-            <span className="text-3xl">🎬</span>
+            <MovieSyncLogo size={34} className="text-yellow-500" />
           </div>
           <h1 className="text-2xl font-black text-white tracking-tight">
             Movie<span className="text-yellow-500">Sync</span>
@@ -728,7 +746,7 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
 
   const FilterChip = ({ active, onClick, children }) => (
     <button onClick={onClick}
-      className={`px-3 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap transition-all flex-shrink-0 ${
+      className={`px-3 py-1 rounded-xl text-[10px] font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
         active ? 'bg-yellow-500 text-black shadow-md' : 'bg-[#1c1c26] text-gray-400 border border-white/10 hover:text-gray-200'
       }`}>{children}</button>
   );
@@ -1400,7 +1418,7 @@ function LibraryPage({ movies, onToggle, onDelete, onRate, onLogout, onOpenSeed,
 
   const Chip = ({ active, onClick, children, activeClass = 'bg-yellow-500 text-black' }) => (
     <button onClick={onClick}
-      className={`px-3.5 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-all flex-shrink-0 ${
+      className={`px-3.5 py-1 rounded-xl text-[11px] font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
         active ? activeClass : 'bg-[#1c1c26] text-gray-400 border border-white/10 hover:text-gray-200'
       }`}>{children}</button>
   );
@@ -1465,7 +1483,7 @@ function LibraryPage({ movies, onToggle, onDelete, onRate, onLogout, onOpenSeed,
           <span className="text-yellow-600 font-black">{pct}%</span>
           <span>{total - watched} remaining</span>
         </div>
-        <div className="w-full h-1 bg-[#1c1c26] rounded-full overflow-hidden">
+        <div className="w-full h-1.5 bg-[#1c1c26] rounded-full overflow-hidden">
           <div className="h-full bg-yellow-500 rounded-full transition-all duration-500" style={{width:`${pct}%`}} />
         </div>
       </div>
@@ -1909,7 +1927,7 @@ useEffect(() => {
           <div className="pt-10 pb-0 px-5 bg-[#0f0f13] border-b border-white/5">
             <p className="text-[9px] uppercase tracking-[0.35em] text-gray-500">The Ultimate Canon</p>
             <h1 className="text-2xl font-black mt-0.5 text-purple-400">FlickScient</h1>
-            <p className="text-[9px] text-gray-700 mt-0.5 pb-4">AI Film Companion · powered by Gemini</p>
+            <p className="text-[9px] text-gray-700 mt-0.5 pb-4">AI Film Companion · powered by Groq</p>
           </div>
           <FlickScient myList={movies} />
         </div>

@@ -736,10 +736,13 @@ export default function FlickScient({ myList }) {
               <div className="w-8 h-8 rounded-xl bg-[#16161d] border border-purple-500/30 flex items-center justify-center flex-shrink-0 text-purple-400">
                 <Clapperboard size={15} className="animate-pulse" />
               </div>
-              <div className="bg-[#121218] border border-white/5 p-4 rounded-2xl rounded-tl-none flex gap-1.5 items-center">
-                <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce" />
-                <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce [animation-delay:0.2s]" />
-                <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce [animation-delay:0.4s]" />
+              <div className="bg-gradient-to-b from-[#121218] to-[#0f0f14] border border-white/5 px-4 py-3.5 rounded-2xl rounded-tl-none flex items-center gap-3 mr-6 shadow-md">
+                <div className="flex gap-1 items-center">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDuration: '1s' }} />
+                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDuration: '1s', animationDelay: '0.18s' }} />
+                  <div className="w-2 h-2 bg-purple-300 rounded-full animate-bounce" style={{ animationDuration: '1s', animationDelay: '0.36s' }} />
+                </div>
+                <span className="text-[11px] text-gray-600 tracking-wide">Thinking…</span>
               </div>
             </div>
           )}
