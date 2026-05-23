@@ -754,7 +754,7 @@ export default function FlickScient({ myList }) {
           <div className="flex gap-2 overflow-x-auto pb-3" style={{ scrollbarWidth: 'none' }}>
             {MOOD_PILLS.map(pill => (
               <button key={pill.label} onClick={() => sendMessage(pill.prompt)} disabled={loading}
-                className="flex-shrink-0 flex items-center gap-1.5 bg-[#1a1a26] border border-white/5 hover:border-purple-500/30 hover:bg-purple-500/10 text-gray-400 hover:text-purple-300 rounded-full px-3 py-1.5 text-[11px] font-bold transition-all active:scale-95 disabled:opacity-40">
+                className="flex-shrink-0 flex items-center gap-1.5 bg-amber-950/50 border border-amber-800/40 hover:border-amber-600/50 hover:bg-amber-900/40 text-amber-400 hover:text-amber-200 rounded-full px-3 py-1.5 text-[11px] font-bold transition-all active:scale-95 disabled:opacity-40">
                 <span>{pill.emoji}</span><span>{pill.label}</span>
               </button>
             ))}

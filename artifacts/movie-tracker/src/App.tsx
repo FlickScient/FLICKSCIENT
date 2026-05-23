@@ -478,7 +478,7 @@ function MovieDetailModal({ movie, onClose, onToggle, onRate, onDelete, onEpisod
             <img
               src={details?.backdrop_path ? TMDB_IMG(details.backdrop_path, 'w780') : movie.poster}
               alt="" className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#111116] via-[#111116]/60 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
           </div>
         )}
 
