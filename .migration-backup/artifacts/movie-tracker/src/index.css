@@ -320,3 +320,66 @@
     inset: -1px;
   }
 }
+/* ─── LIGHT MODE ─────────────────────────────────────────────────────────────── */
+html.light { color-scheme: light; }
+html.light,
+html.light body { background-color: #ffffff !important; }
+
+/* Backgrounds — clean white hierarchy */
+html.light .bg-\[\#0a0a0c\],
+html.light .bg-\[\#0d0d12\]  { background-color: #ffffff !important; }
+html.light .bg-\[\#0f0f13\],
+html.light .bg-\[\#0f0f14\]  { background-color: #f9fafb !important; }
+html.light .bg-\[\#111116\]  { background-color: #f3f4f6 !important; }
+html.light .bg-\[\#121218\],
+html.light .bg-\[\#12121a\]  { background-color: #f3f4f6 !important; }
+html.light .bg-\[\#16161d\]  { background-color: #e9eaeb !important; }
+html.light .bg-\[\#1a1a24\]  { background-color: #e5e7eb !important; }
+html.light .bg-\[\#1c1c26\]  { background-color: #d1d5db !important; }
+
+/* AI chat bubble gradient — light slate to white */
+html.light .from-\[\#121218\] {
+  --tw-gradient-from: #f1f5f9 !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, transparent) !important;
+}
+html.light .to-\[\#0f0f14\]  { --tw-gradient-to: #ffffff !important; }
+
+/* Text — proper dark-on-white scale */
+html.light .text-white       { color: #111111 !important; }
+html.light .text-gray-100    { color: #1f2937 !important; }
+html.light .text-gray-200    { color: #374151 !important; }
+html.light .text-gray-300    { color: #4b5563 !important; }
+html.light .text-gray-400    { color: #6b7280 !important; }
+html.light .text-gray-500    { color: #9ca3af !important; }
+html.light .text-gray-600    { color: #6b7280 !important; }
+html.light .text-gray-700    { color: #9ca3af !important; }
+html.light .text-gray-800    { color: #d1d5db !important; }
+
+/* Borders */
+html.light .border-white\/5         { border-color: rgba(0,0,0,0.08) !important; }
+html.light .border-white\/10        { border-color: rgba(0,0,0,0.12) !important; }
+html.light .border-white\/\[0\.06\] { border-color: rgba(0,0,0,0.08) !important; }
+html.light .border-gray-800         { border-color: rgba(0,0,0,0.15) !important; }
+
+/* Inputs */
+html.light input, html.light textarea {
+  background-color: #ffffff !important;
+  color: #111111 !important;
+  border-color: rgba(0,0,0,0.15) !important;
+}
+html.light input::placeholder,
+html.light textarea::placeholder { color: #9ca3af !important; }
+
+/* Overlay / backdrop — standard black at reduced opacity */
+html.light .bg-black\/60  { background-color: rgba(0,0,0,0.55) !important; }
+html.light .bg-black\/75  { background-color: rgba(0,0,0,0.70) !important; }
+html.light .bg-black\/50  { background-color: rgba(0,0,0,0.45) !important; }
+
+/* Yellow/amber — slightly darkened for legibility on white */
+html.light .text-yellow-400  { color: #ca8a04 !important; }
+html.light .text-yellow-500  { color: #a16207 !important; }
+html.light .text-yellow-600  { color: #92400e !important; }
+html.light .text-yellow-700  { color: #78350f !important; }
+html.light .text-yellow-800  { color: #78350f !important; }
+html.light .bg-yellow-500    { background-color: #eab308 !important; }
+html.light .hover\:bg-yellow-400:hover { background-color: #facc15 !important; }

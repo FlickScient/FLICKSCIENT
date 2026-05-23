@@ -1,6 +1,0 @@
-{
-  "installCommand": "pnpm install",
-  "buildCommand": "pnpm --filter @workspace/movie-tracker run build",
-  "outputDirectory": "artifacts/movie-tracker/dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
-}

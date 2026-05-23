@@ -1,20 +1,18 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from './lib/supabase';
 import {
   Search, Heart, CheckCircle, LogOut, Plus, ArrowUp,
   Film, X, Trash2, Star, Globe, Users, SlidersHorizontal,
   ChevronRight, BarChart2, Clock, Zap, Award, Download,
   Bookmark, Menu, Settings, User, ChevronDown, ChevronUp,
   PlayCircle, TvMinimal, Clapperboard, RefreshCw, Sparkles,
+  Sun, Moon,
 } from 'lucide-react';
 import FlickScient from './FlickScient';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
-const TMDB_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI4MTA1NDM4MWYzY2M2NGY1ZjllNmVkNjVlMjIwNzgzYiIsIm5iZiI6MTc3NzU2MzkzNy4zMzIsInN1YiI6IjY5ZjM3OTIxZWFjNjM3MmZmYjBlNjAyNCIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.YgTiOJcH5eCqqrc3uWg6CvTNbvCa5UNzy4jpaeQ6zXs";
-const SUPABASE_URL = "https://rcdjmzxiectkckufyqyr.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjZGptenhpZWN0a2NrdWZ5cXlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1NjcxOTMsImV4cCI6MjA5MzE0MzE5M30.TNFfE6RDV4MX3H-M8zA-h72lux4Mgdd9srqDFJAJHnE";
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { flowType: 'pkce', detectSessionInUrl: true } });
+const TMDB_TOKEN = import.meta.env.VITE_TMDB_TOKEN as string;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const TMDB_GENRES = {
@@ -136,7 +134,7 @@ function LoginScreen() {
     setLoading(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: 'https://moviesyncfs.vercel.app' },
+      options: { redirectTo: window.location.origin + '/?login=google' },
     });
     if (error) { setMsg({ text: error.message, ok: false }); setLoading(false); }
   };
@@ -253,9 +251,21 @@ function LoginScreen() {
 }
 
 // ─── Drawer Menu ──────────────────────────────────────────────────────────────
-function DrawerMenu({ open, onClose, user, onLogout, onOpenSeed }) {
+const AVATAR_GRADIENTS = [
+  'linear-gradient(135deg,#a855f7,#ec4899)',  // 0 purple → pink
+  'linear-gradient(135deg,#f97316,#ef4444)',  // 1 orange → red
+  'linear-gradient(135deg,#3b82f6,#06b6d4)',  // 2 blue → cyan
+  'linear-gradient(135deg,#10b981,#84cc16)',  // 3 emerald → lime
+  'linear-gradient(135deg,#d946ef,#6366f1)',  // 4 fuchsia → indigo
+  'linear-gradient(135deg,#f59e0b,#10b981)',  // 5 amber → emerald
+  'linear-gradient(135deg,#06b6d4,#8b5cf6)',  // 6 cyan → violet
+  'linear-gradient(135deg,#f43f5e,#f97316)',  // 7 rose → orange
+];
+
+function DrawerMenu({ open, onClose, user, onLogout, onOpenSeed, lightMode, onToggleLight }) {
   const email = user?.email || '';
   const initials = email ? email[0].toUpperCase() : '?';
+  const avatarGradient = AVATAR_GRADIENTS[(email ? email.charCodeAt(0) : 0) % 8];
   return (
     <>
       <div
@@ -266,7 +276,8 @@ function DrawerMenu({ open, onClose, user, onLogout, onOpenSeed }) {
         {/* Profile */}
         <div className="pt-14 pb-6 px-6 border-b border-white/5">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-yellow-500 flex items-center justify-center text-black text-xl font-black flex-shrink-0">
+            <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-black flex-shrink-0 shadow-lg"
+              style={{ background: avatarGradient }}>
               {initials}
             </div>
             <div className="min-w-0">
@@ -278,6 +289,14 @@ function DrawerMenu({ open, onClose, user, onLogout, onOpenSeed }) {
 
         {/* Menu items */}
         <div className="flex-1 px-4 py-4 space-y-1">
+          <button onClick={onToggleLight}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-white/5 transition-colors text-left">
+            <span className={lightMode ? 'text-amber-500' : 'text-blue-400'}>{lightMode ? <Sun size={18} /> : <Moon size={18} />}</span>
+            <div>
+              <p className="text-sm font-bold text-white">{lightMode ? 'Light Mode' : 'Dark Mode'}</p>
+              <p className="text-[10px] text-gray-600">{lightMode ? 'Tap to switch to dark' : 'Tap to switch to light'}</p>
+            </div>
+          </button>
           <DrawerItem icon={<Download size={18} />} label="Import 500 Films" sub="Seed your library from TMDB" onClick={() => { onOpenSeed(); onClose(); }} />
           <DrawerItem icon={<Settings size={18} />} label="Settings" sub="Preferences & account" onClick={() => { alert('Settings coming soon!'); onClose(); }} />
           <DrawerItem icon={<User size={18} />} label="Profile" sub={email} onClick={onClose} />
@@ -601,7 +620,7 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
   const isAddedWL  = (item) => addedWL.has(item.id)  || existingTitles.has((item.title || item.name || '').toLowerCase() + ':wl');
   const isAnyAdded = (item) => isAddedLib(item) || isAddedWL(item);
 
-  useEffect(() => { if (tab === 'discover' && !trendingLoaded) loadTrending(); }, [tab]);
+  useEffect(() => { if (tab === 'discover') loadTrending(); }, [tab]);
 
   const loadTrending = async () => {
     setTrendingLoading(true);
@@ -744,7 +763,7 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
               <p className="text-xs text-gray-600 uppercase tracking-widest font-black">Trending Today</p>
               <p className="text-[10px] text-gray-700 mt-0.5">Updated daily · Movies & Series</p>
             </div>
-            <button onClick={() => { setTrendingLoaded(false); loadTrending(); }}
+            <button onClick={() => loadTrending()}
               className="flex items-center gap-1.5 text-[10px] text-yellow-600 font-bold border border-yellow-600/30 px-3 py-1.5 rounded-full hover:bg-yellow-500/10 transition-colors">
               <RefreshCw size={11} /> Refresh
             </button>
@@ -1149,7 +1168,7 @@ function StatsPage({ movies }) {
             <div className="flex-1 space-y-3">
               <div><div className="text-2xl font-black text-white">{watched.length}</div><div className="text-[9px] text-gray-600 uppercase tracking-wider">Films Watched</div></div>
               <div><div className="text-lg font-black text-blue-400">{watchlist.length}</div><div className="text-[9px] text-gray-600 uppercase tracking-wider">In Watchlist</div></div>
-              <div><div className="text-lg font-black text-yellow-500">{watchHours}h</div><div className="text-[9px] text-gray-600 uppercase tracking-wider">Est. Watch Time</div></div>
+              <div><div className="text-lg font-black text-yellow-500">{watchHours}h <span className="text-sm font-bold text-amber-600/70">· {watchDays}d</span></div><div className="text-[9px] text-gray-600 uppercase tracking-wider">Est. Watch Time</div></div>
             </div>
           </div>
         </div>
@@ -1766,17 +1785,70 @@ function BottomNav({ view, setView }) {
 }
 
 // ─── Root App ─────────────────────────────────────────────────────────────────
+function getViewFromHash() {
+  const hash = window.location.hash.replace('#', '');
+  if (['flickscient', 'stats', 'search'].includes(hash)) return hash;
+  return 'library';
+}
+
+function cleanAuthHash() {
+  if (
+    window.location.hash.includes('access_token') ||
+    window.location.hash.includes('refresh_token') ||
+    window.location.hash.includes('token_type')
+  ) {
+    window.history.replaceState(null, '', window.location.pathname);
+  }
+}
+
 export default function App() {
   const [user,        setUser]       = useState(null);
   const [movies,      setMovies]     = useState([]);
-  const [view,        setView]       = useState('library');
+  const [view,        setViewState]  = useState(getViewFromHash);
   const [showSeed,    setShowSeed]   = useState(false);
   const [drawerOpen,  setDrawerOpen] = useState(false);
+  const [lightMode,   setLightMode]  = useState(() => localStorage.getItem('lm') === 'true');
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => setUser(session?.user ?? null));
-    return () => subscription.unsubscribe();
+    document.documentElement.classList.toggle('light', lightMode);
+    localStorage.setItem('lm', String(lightMode));
+  }, [lightMode]);
+
+  const setView = (v) => {
+    setViewState(v);
+    if (v === 'library') {
+      window.history.replaceState(null, '', window.location.pathname);
+    } else {
+      window.history.replaceState(null, '', '#' + v);
+    }
+  };
+
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search)
+  const code = params.get('code')
+  if (code) {
+    supabase.auth.exchangeCodeForSession(window.location.search)
+      .then(({ data }) => {
+        if (data?.session) setUser(data.session.user)
+      })
+      .catch(() => {})
+  } else {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      cleanAuthHash()
+    })
+  }
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+    setUser(session?.user ?? null)
+    cleanAuthHash()
+  })
+  return () => subscription.unsubscribe()
+}, [])
+  
+  useEffect(() => {
+    const onHashChange = () => setViewState(getViewFromHash());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
   useEffect(() => { if (user) fetchMovies(); else setMovies([]); }, [user]);
@@ -1823,7 +1895,8 @@ export default function App() {
   return (
     <>
       <DrawerMenu open={drawerOpen} onClose={() => setDrawerOpen(false)}
-        user={user} onLogout={() => supabase.auth.signOut()} onOpenSeed={() => setShowSeed(true)} />
+        user={user} onLogout={() => supabase.auth.signOut()} onOpenSeed={() => setShowSeed(true)}
+        lightMode={lightMode} onToggleLight={() => setLightMode(v => !v)} />
 
       {view === 'library' && (
         <LibraryPage movies={movies} onToggle={toggleStatus} onRate={rateMovie} onDelete={deleteMovie}
@@ -1836,7 +1909,7 @@ export default function App() {
           <div className="pt-10 pb-0 px-5 bg-[#0f0f13] border-b border-white/5">
             <p className="text-[9px] uppercase tracking-[0.35em] text-gray-500">The Ultimate Canon</p>
             <h1 className="text-2xl font-black mt-0.5 text-purple-400">FlickScient</h1>
-            <p className="text-[9px] text-gray-700 mt-0.5 pb-4">AI Film Companion · powered by GPT</p>
+            <p className="text-[9px] text-gray-700 mt-0.5 pb-4">AI Film Companion · powered by Gemini</p>
           </div>
           <FlickScient myList={movies} />
         </div>

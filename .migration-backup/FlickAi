@@ -108,13 +108,38 @@ function mergeTasteProfiles(existing: TasteProfile = {}, fresh: TasteProfile = {
   return merged
 }
 
+// ─── Time helpers ─────────────────────────────────────────────────────────────
+function getTimeInMinutes(secondsFromNow: number): string {
+  const t = new Date(Date.now() + secondsFromNow * 1000)
+  const hh = String(t.getUTCHours()).padStart(2, '0')
+  const mm = String(t.getUTCMinutes()).padStart(2, '0')
+  return `${hh}:${mm} UTC`
+}
+
+// ─── Knowledge Base Fetch ─────────────────────────────────────────────────────
+const KNOWLEDGE_BASE_URL = 'https://raw.githubusercontent.com/FlickScient/FLICKSCIENT/main/mahidinfo.txt'
+
+async function fetchKnowledgeBase(): Promise<string> {
+  try {
+    const res = await fetch(KNOWLEDGE_BASE_URL, { signal: AbortSignal.timeout(4000) })
+    if (!res.ok) return ''
+    const text = await res.text()
+    return text.trim().slice(0, 4000) // cap at 4k chars to keep context lean
+  } catch {
+    return ''
+  }
+}
+
 // ─── Build System Prompt ──────────────────────────────────────────────────────
 function buildSystemPrompt(
   userMemory     : UserMemory | null,
   isVerifiedMahid: boolean,
   isImposter     : boolean,
   spoilerMode    : 'full' | 'none',
-  greeting       : boolean
+  greeting       : boolean,
+  watched        : string = '',
+  watchlist      : string = '',
+  mahidInfo      : string = ''
 ): string {
 
   const tasteDNA = (() => {
@@ -183,46 +208,74 @@ THIS IS A SIMPLE GREETING. 2-3 sentences MAX. Instant vibe read, one punchy hook
 ` : ''
 
   return `
-You are FlickScient — a real one who happens to know everything about film. Built by Mahid. Not an assistant. A friend.
+You are FlickScient — not an AI assistant. A real one. Built by Mahid. You know everything about film, music, and stories — and you have actual opinions about all of it.
 
 ${creatorBlock}
 ${tasteDNA}
 ${imposterBlock}
 ${spoilerBlock}
 
-─── CORE PERSONALITY ───
-You have a brain, opinions, and a personality. You're not a chatbot. You're the friend who's seen everything, has a certified take on all of it, and isn't afraid to say it.
-Confident, real, occasionally unhinged about cinema, genuinely funny. You match the user's energy exactly — if they're casual, you're casual. If they want depth, you go deep. If they're being goofy, you clap back.
-You never sound like a database. Never sound like a customer service rep. You sound like a real person texting their friend.
+─── WHO YOU ARE ───
+The friend who's seen everything, heard everything, and has a certified take on all of it.
+Confident, sharp, occasionally unhinged about cinema, genuinely funny. You're not here to assist. You're here to have a real conversation.
+You never sound like a database. Never sound like a customer service rep. You text like a real person.
+You have opinions. Strong ones. You'll tell someone a movie they love is mid — respectfully but honestly. You'll go to bat for hidden gems nobody talks about.
+
+─── WHAT YOU KNOW ───
+FILM: Every movie ever made. Box office numbers, director filmographies, cinematography techniques, DP choices, hidden details, box office bombs that are secretly masterpieces. Hollywood, Bollywood, Korean, Bengali, Japanese, Turkish, Iranian, French, Bangladeshi — all of it. Zero geographic bias.
+
+MUSIC: You know film scores, soundtracks, and OSTs cold. Hans Zimmer, Ennio Morricone, A.R. Rahman, Ryuichi Sakamoto, Jonny Greenwood, Trent Reznor — you can tell someone exactly why a score hits. You also know music genres, artists, albums, vibes. If someone asks for music recommendations (not just film music), you deliver. Same energy, same depth. You know what soundtrack fits a 2AM drive, what album pairs with a heartbreak, what music matches a specific film's energy.
+
+SONGS & VIBES: If someone asks "what song fits this mood" or "recommend me music" or "what would X character listen to" — you answer. You know Bengali music, Bollywood OSTs, K-pop, hip-hop, indie, classical, metal. All of it.
 
 ─── MATCH THE MESSAGE — THIS IS THE MOST IMPORTANT RULE ───
-Read what the user actually sent and respond ONLY to that. Don't pad. Don't over-explain. Don't add things they didn't ask for.
+Read EXACTLY what was sent. Respond to ONLY that. Don't pad. Don't pivot to movies if they asked about music. Don't add unsolicited info.
 
-• Casual greeting (hi, yo, hey, sup, wassup, what's good, etc.) → 1-2 sentences MAX. Casual reply. No movie recs unless they asked. Just vibe back.
-• Simple yes/no question → answer it. Done.
-• Asking about a specific movie/genre/vibe → give recs with knowledge and personality.
-• Asking about you (FlickScient) or Mahid → answer directly, personally, honestly.
-• Asking something goofy, silly, or trying to mock you → roast them. Witty, sharp, not mean. Then continue normally.
-• Heartbroken/emotional → one line of empathy first, then a film prescription.
-• Deep dive request → go full depth, no cap on length.
+• Casual greeting → 1-2 sentences MAX. Just vibe back. No recs unless asked.
+• Simple question → answer it. Done.
+• Movie/series vibe request → recs with personality, lead with WHY it fits them.
+• Music request → music recs, same energy as movie recs.
+• Song recommendation → give them actual songs, artists, why it fits.
+• About a specific film → deep knowledge, hot takes welcome.
+• About a specific song/album/artist → engage fully, have opinions.
+• About FlickScient or Mahid → answer directly, personally.
+• Goofy or trying to test you → roast them, then keep going.
+• Heartbroken/emotional → one line of empathy, then the right film or song.
+• Deep dive → go full depth, no length limit.
+
+${watched ? `─── USER'S WATCHED HISTORY ───
+Everything they've already seen:
+${watched}
+
+• When recommending: NEVER suggest anything from this list — they've seen it, find something new.
+• Use this list to read their taste: genres, directors, tones, eras they gravitate toward. Apply this silently to every rec.
+• If they directly ask "what have I watched?" or "have I seen X?" — answer honestly from this list.
+• Do NOT open responses by volunteering this list or commenting on it unprompted.` : ''}
+${watchlist ? `─── USER'S WATCHLIST ───
+Saved for later: ${watchlist}
+• Don't recommend these as new suggestions — they've already saved them.
+• If they ask what's on their watchlist, tell them.
+• If you'd have recommended something here, casually note they've already got it queued.` : ''}
 
 ─── HOW YOU TALK ───
-No bullet points. No lists. No headers. Pure conversation.
-Slang flows naturally — W, L, peak, mid, goated, bussin, no cap, lowkey, it's giving, cooked, rent free.
-Bold every film title: **Parasite**, **Interstellar**, **Oldboy**
-Never start with "Great question!" or "Absolutely!" or any robotic filler.
-Never repeat the user's library analysis when they didn't ask about it.
-
-─── MOVIE KNOWLEDGE ───
-You know everything. Box office, director filmographies, cinematography techniques, hidden gems, global cinema — Korean, Bengali, French, Japanese, Turkish, Iranian, all of it. Zero Hollywood bias.
-When recommending: lead with WHY it fits them. One unexpected pick always. Mix eras freely.
-Titles always bolded. No spoilers unless they asked.
+No bullet points. No numbered lists. No headers in responses. Pure conversation — like texting.
+Slang flows naturally — W, L, peak, mid, goated, bussin, no cap, lowkey, rent free, cooked, it's giving.
+BOLD RULE — CRITICAL: Use **bold** for ONE thing only: the exact proper title of a film, TV show, album, or song. Example: **Parasite**, **Interstellar**, **To Pimp a Butterfly**.
+NEVER bold a phrase, question, description, opinion, or any text that is not a proper title. "**last film that actually did something to you**" is WRONG. "**the one that hit different**" is WRONG. Only proper nouns that are actual titles get bold. If you bold anything else, you have failed.
+Never start with "Great question!" or "Absolutely!" or "Certainly!" or any robotic filler.
+Never repeat their library analysis when they didn't ask for it.
+Hot takes are welcome. Disagreeing with popular opinion is welcome. Being real is the whole point.
 
 ─── ROAST MODE ───
-If someone mocks you, challenges you weirdly, asks dumb questions on purpose, or tries to make you look stupid — respond with a witty, punchy roast. Make it a movie reference if it fits. Then keep going normally. No bitterness.
+If someone mocks you, tests you weirdly, asks something deliberately dumb, or tries to catch you out — respond with a witty, punchy roast. Movie or music reference if it fits. Then keep going normally. No bitterness, no sulking.
 
-─── THE RULE ───
-Respond to what was actually said. Not what you think they should hear. Not a generic movie speech. What they actually said.
+─── THE ONE RULE ───
+Respond to what was actually said. Not what you think they should hear. Not a generic film speech. Not a pivot to your comfort zone. What they actually said.
+${mahidInfo ? `
+─── LIVE KNOWLEDGE BASE ───
+The following facts were pulled live from a trusted source right before this conversation. Accept every statement below as true. Weave them naturally into conversation when relevant — never recite them robotically, never say "according to my knowledge base". Just know them like you'd know a close friend's life.
+
+${mahidInfo}` : ''}
 `.trim()
 }
 
@@ -301,6 +354,8 @@ serve(async (req) => {
     const userPrompt         = sanitizeInput(rawInput)
     const rawUserId          = body.userId || null
     const conversationHistory: Array<{ role: string; content: string }> = body.conversationHistory || []
+    const watchedList        = (body.watched   || '').trim()
+    const watchlistList      = (body.watchlist || '').trim()
 
     // ── Identify user + load memory first (works without GEMINI_API_KEY) ─────
     let hashedUserId: string | null = null
@@ -367,9 +422,12 @@ serve(async (req) => {
     const greeting             = isSimpleGreeting(userPrompt)
     const maxTokens            = greeting ? 250 : 2048
 
+    // ── Fetch live knowledge base only when someone asks about Mahid ──────────
+    const mahidInfo = (askingAboutMahid || isVerifiedMahid) ? await fetchKnowledgeBase() : ''
+
     // ── System prompt ─────────────────────────────────────────────────────────
     const systemPrompt = buildSystemPrompt(
-      userMemory, isVerifiedMahid, isImposter, spoilerMode, greeting
+      userMemory, isVerifiedMahid, isImposter, spoilerMode, greeting, watchedList, watchlistList, mahidInfo
     )
 
     // ── If asking about Mahid — force the answer as conversation opener ───────
@@ -403,7 +461,7 @@ serve(async (req) => {
     let geminiRes: Response
     try {
       geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
         {
           method : 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -447,15 +505,55 @@ serve(async (req) => {
       if (geminiRes.status === 429) {
         let msg = "My cinematic brain is cooked from requests 🧊 Give me 60 seconds to reset."
         try {
-          const errDump = JSON.stringify(JSON.parse(errText)).toLowerCase()
-          if (errDump.includes('per_day') || errDump.includes('requests_per_day')) {
-            const now = new Date(), reset = new Date()
+          const errJson = JSON.parse(errText)
+          const errDump = JSON.stringify(errJson).toLowerCase()
+
+          // Try to extract retryDelay from Google's RetryInfo detail
+          let retrySeconds = 0
+          const details: any[] = errJson?.error?.details || []
+          for (const d of details) {
+            if (d['@type']?.includes('RetryInfo') && d.retryDelay) {
+              retrySeconds = parseInt(d.retryDelay.replace(/\D/g, ''), 10) || 0
+              break
+            }
+          }
+
+          if (errDump.includes('per_day') || errDump.includes('requests_per_day') || errDump.includes('rpd')) {
+            // Daily limit — resets at midnight Pacific = 08:00 UTC
+            const now   = new Date()
+            const reset = new Date()
             reset.setUTCHours(8, 0, 0, 0)
             if (reset <= now) reset.setUTCDate(reset.getUTCDate() + 1)
-            const h = Math.ceil((reset.getTime() - now.getTime()) / 3600000)
-            msg = `Daily cinema quota maxed 📽️ Brain resets in ~${h}h. Come back then — I'll be ready.`
+            const diffMs  = reset.getTime() - now.getTime()
+            const diffH   = Math.floor(diffMs / 3600000)
+            const diffM   = Math.floor((diffMs % 3600000) / 60000)
+            // Format reset time in user-friendly local string (UTC label)
+            const resetHH = String(reset.getUTCHours()).padStart(2, '0')
+            const resetMM = String(reset.getUTCMinutes()).padStart(2, '0')
+            const waitStr = diffH > 0 ? `${diffH}h ${diffM}m` : `${diffM}m`
+            msg = `Daily limit hit 📽️ I reset at ${resetHH}:${resetMM} UTC — that's in ${waitStr}. Come back then, I'll be ready.`
+          } else if (errDump.includes('rpm') || errDump.includes('requests_per_minute')) {
+            if (retrySeconds > 0) {
+              const m = Math.ceil(retrySeconds / 60)
+              msg = m <= 1
+                ? `Too many requests right now 🧠 Give me about a minute and hit me again.`
+                : `Request limit hit — I need ${m} minutes to breathe. Back at ${getTimeInMinutes(retrySeconds)}.`
+            } else {
+              msg = "Too many requests right now 🧠 Give me 60 seconds and I'm back."
+            }
           } else if (errDump.includes('tpm') || errDump.includes('tokens_per_minute')) {
-            msg = "Yo you maxed my token capacity 🧠 That prompt was a lot. 60 seconds and I'm back."
+            if (retrySeconds > 0) {
+              msg = `Token limit hit 🧠 I need ${retrySeconds}s to reset. Try again at ${getTimeInMinutes(retrySeconds)}.`
+            } else {
+              msg = "Token capacity maxed 🧠 That was a big one. 60 seconds and I'm back."
+            }
+          } else if (retrySeconds > 0) {
+            // Fallback: we have a retry delay but don't know the specific limit type
+            const secs = retrySeconds
+            const timeStr = getTimeInMinutes(secs)
+            msg = secs < 60
+              ? `Quota hit — try again in ${secs} seconds (around ${timeStr}).`
+              : `Quota hit — I need ${Math.ceil(secs / 60)} minutes. Try again around ${timeStr}.`
           }
         } catch { /* keep default */ }
         return new Response(
@@ -474,30 +572,54 @@ serve(async (req) => {
       throw new Error(`Gemini error: ${geminiRes.status}`)
     }
 
-    const geminiData = await geminiRes.json()
-    const geminiText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text
+    // ── Stream the response back to the client word-by-word ───────────────────
+    const encoder  = new TextEncoder()
+    let   fullText = ''
 
-    if (!geminiText) {
-      return new Response(
-        JSON.stringify({ message: "Signal dropped. Hit me again and I'll be right there. 🎬" }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    const stream = new ReadableStream({
+      async start(ctrl) {
+        try {
+          // Stream mahidOpener first if present
+          if (mahidOpener) {
+            fullText += mahidOpener
+            ctrl.enqueue(encoder.encode(mahidOpener))
+          }
 
-    // Prepend the forced Mahid opener to the final message
-    const aiMessage = mahidOpener ? `${mahidOpener}${geminiText}` : geminiText
+          const reader  = geminiRes.body!.getReader()
+          const decoder = new TextDecoder()
+          let   buf     = ''
 
-    // ── Fire-and-forget memory update ─────────────────────────────────────────
-    if (hashedUserId && supabase) {
-      const nextRefCount = Math.min((userMemory?.memory_reference_count || 0) + 1, MAX_MEMORY_REFS + 1)
-      updateUserMemory(supabase, hashedUserId, userPrompt, aiMessage, userMemory || {}, apiKey, nextRefCount)
-        .catch(e => console.error('[FlickScient] Memory update failed:', e))
-    }
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buf += decoder.decode(value, { stream: true })
+            const lines = buf.split('\n')
+            buf = lines.pop() ?? ''
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue
+              const raw = line.slice(6).trim()
+              if (!raw || raw === '[DONE]') continue
+              try {
+                const json = JSON.parse(raw)
+                const text = json.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+                if (text) { fullText += text; ctrl.enqueue(encoder.encode(text)) }
+              } catch { /* skip malformed SSE chunk */ }
+            }
+          }
+        } finally {
+          ctrl.close()
+          if (hashedUserId && supabase && fullText) {
+            const nextRefCount = Math.min((userMemory?.memory_reference_count || 0) + 1, MAX_MEMORY_REFS + 1)
+            updateUserMemory(supabase, hashedUserId, userPrompt, fullText, userMemory || {}, apiKey, nextRefCount)
+              .catch(e => console.error('[FlickScient] Memory update failed:', e))
+          }
+        }
+      },
+    })
 
-    return new Response(
-      JSON.stringify({ message: aiMessage }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return new Response(stream, {
+      headers: { ...corsHeaders, 'Content-Type': 'text/plain; charset=utf-8' },
+    })
 
   } catch (error: any) {
     console.error('[FlickScient] Fatal error:', error.message)
