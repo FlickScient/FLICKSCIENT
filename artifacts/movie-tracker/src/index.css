@@ -320,69 +320,97 @@
     inset: -1px;
   }
 }
-/* ─── LIGHT MODE ─────────────────────────────────────────────────────────────── */
+/* ─── LIGHT MODE — clean, professional, editorial ────────────────────────────── */
 html.light { color-scheme: light; }
 html.light,
-html.light body { background-color: #ffffff !important; }
+html.light body { background-color: #f5f5f7 !important; }
 
-/* Backgrounds — clean white hierarchy */
+/* ── Backgrounds — Apple-style neutral hierarchy ── */
 html.light .bg-\[\#0a0a0c\],
-html.light .bg-\[\#0d0d12\]  { background-color: #ffffff !important; }
+html.light .bg-\[\#0d0d12\]  { background-color: #f5f5f7 !important; }
+
 html.light .bg-\[\#0f0f13\],
-html.light .bg-\[\#0f0f14\]  { background-color: #f9fafb !important; }
-html.light .bg-\[\#111116\]  { background-color: #f3f4f6 !important; }
-html.light .bg-\[\#121218\],
-html.light .bg-\[\#12121a\]  { background-color: #f3f4f6 !important; }
-html.light .bg-\[\#16161d\]  { background-color: #e9eaeb !important; }
-html.light .bg-\[\#1a1a24\]  { background-color: #e5e7eb !important; }
-html.light .bg-\[\#1c1c26\]  { background-color: #d1d5db !important; }
+html.light .bg-\[\#0f0f14\]  { background-color: #eeeeef !important; }
 
-/* AI chat bubble gradient — light slate to white */
-html.light .from-\[\#121218\] {
-  --tw-gradient-from: #f1f5f9 !important;
-  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, transparent) !important;
+/* Cards — pure white to create clear depth */
+html.light .bg-\[\#111116\],
+html.light .bg-\[\#111118\]  {
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 6px 20px rgba(0,0,0,0.04) !important;
 }
-html.light .to-\[\#0f0f14\]  { --tw-gradient-to: #ffffff !important; }
 
-/* Text — proper dark-on-white scale */
-html.light .text-white       { color: #111111 !important; }
-html.light .text-gray-100    { color: #1f2937 !important; }
-html.light .text-gray-200    { color: #374151 !important; }
-html.light .text-gray-300    { color: #4b5563 !important; }
-html.light .text-gray-400    { color: #6b7280 !important; }
-html.light .text-gray-500    { color: #9ca3af !important; }
-html.light .text-gray-600    { color: #6b7280 !important; }
-html.light .text-gray-700    { color: #9ca3af !important; }
-html.light .text-gray-800    { color: #d1d5db !important; }
+html.light .bg-\[\#121218\],
+html.light .bg-\[\#12121a\]  { background-color: #ffffff !important; }
+html.light .bg-\[\#16161d\]  { background-color: #f0f0f2 !important; }
+html.light .bg-\[\#1a1a24\]  { background-color: #e9e9eb !important; }
+html.light .bg-\[\#1c1c26\]  { background-color: #e3e3e6 !important; }
 
-/* Borders */
-html.light .border-white\/5         { border-color: rgba(0,0,0,0.08) !important; }
-html.light .border-white\/10        { border-color: rgba(0,0,0,0.12) !important; }
-html.light .border-white\/\[0\.06\] { border-color: rgba(0,0,0,0.08) !important; }
-html.light .border-gray-800         { border-color: rgba(0,0,0,0.15) !important; }
+/* Backdrop / overlay backgrounds */
+html.light .bg-\[\#0a0a0c\]\/95 { background-color: rgba(245,245,247,0.96) !important; }
+html.light .bg-black\/60  { background-color: rgba(0,0,0,0.45) !important; }
+html.light .bg-black\/75  { background-color: rgba(0,0,0,0.60) !important; }
+html.light .bg-black\/50  { background-color: rgba(0,0,0,0.38) !important; }
 
-/* Inputs */
+/* ── Text — professional dark-on-white scale ── */
+html.light .text-white     { color: #0d0d0d !important; }
+html.light .text-gray-100  { color: #111111 !important; }
+html.light .text-gray-200  { color: #1f1f1f !important; }
+html.light .text-gray-300  { color: #333333 !important; }
+html.light .text-gray-400  { color: #555555 !important; }
+html.light .text-gray-500  { color: #777777 !important; }
+html.light .text-gray-600  { color: #555555 !important; }
+html.light .text-gray-700  { color: #888888 !important; }
+html.light .text-gray-800  { color: #bbbbbb !important; }
+
+/* ── Borders — visible but refined ── */
+html.light .border-white\/5         { border-color: rgba(0,0,0,0.07) !important; }
+html.light .border-white\/10        { border-color: rgba(0,0,0,0.10) !important; }
+html.light .border-white\/\[0\.06\] { border-color: rgba(0,0,0,0.07) !important; }
+html.light .border-gray-800         { border-color: rgba(0,0,0,0.12) !important; }
+
+/* ── Inputs — clean with inner depth ── */
 html.light input, html.light textarea {
   background-color: #ffffff !important;
-  color: #111111 !important;
-  border-color: rgba(0,0,0,0.15) !important;
+  color: #0d0d0d !important;
+  border-color: rgba(0,0,0,0.13) !important;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.04) !important;
 }
 html.light input::placeholder,
-html.light textarea::placeholder { color: #9ca3af !important; }
+html.light textarea::placeholder { color: #b0b0b0 !important; }
 
-/* Overlay / backdrop — standard black at reduced opacity */
-html.light .bg-black\/60  { background-color: rgba(0,0,0,0.55) !important; }
-html.light .bg-black\/75  { background-color: rgba(0,0,0,0.70) !important; }
-html.light .bg-black\/50  { background-color: rgba(0,0,0,0.45) !important; }
+/* ── AI chat bubble gradient in light mode ── */
+html.light .from-\[\#121218\] {
+  --tw-gradient-from: #f8f8fb !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, transparent) !important;
+}
+html.light .to-\[\#0f0f14\] { --tw-gradient-to: #ffffff !important; }
 
-/* Yellow/amber — slightly darkened for legibility on white */
-html.light .text-yellow-400  { color: #ca8a04 !important; }
-html.light .text-yellow-500  { color: #a16207 !important; }
-html.light .text-yellow-600  { color: #92400e !important; }
-html.light .text-yellow-700  { color: #78350f !important; }
-html.light .text-yellow-800  { color: #78350f !important; }
+/* ── Yellow / amber — rich and legible on white ── */
+html.light .text-yellow-400  { color: #b45309 !important; }
+html.light .text-yellow-500  { color: #92400e !important; }
+html.light .text-yellow-600  { color: #78350f !important; }
+html.light .text-yellow-700  { color: #6b2d0e !important; }
+html.light .text-yellow-800  { color: #5c2308 !important; }
 html.light .bg-yellow-500    { background-color: #eab308 !important; }
 html.light .hover\:bg-yellow-400:hover { background-color: #facc15 !important; }
+
+/* ── Chip / pill backgrounds — on page bg ── */
+html.light .bg-\[\#2c2c3a\]   { background-color: #d8d8dc !important; }
+html.light .bg-yellow-500\/10 { background-color: rgba(234,179,8,0.10) !important; }
+
+/* ── Movie poster skeleton shimmer ── */
+html.light .bg-\[\#1c1c26\].animate-pulse,
+html.light .animate-pulse.bg-\[\#1c1c26\] { background-color: #e3e3e6 !important; }
+
+/* ── Bottom nav ── */
+html.light .bg-\[\#0a0a0c\]\/90 { background-color: rgba(245,245,247,0.96) !important; }
+
+/* ── Drawer sidebar ── */
+html.light .bg-\[\#111116\].border-r {
+  background-color: #fafafa !important;
+  border-right-color: rgba(0,0,0,0.09) !important;
+  box-shadow: 2px 0 20px rgba(0,0,0,0.08) !important;
+}
 
 /* ─── Card shadows — light mode only ────────────────────────────────────────── */
 html.light .bg-\[\#111116\],

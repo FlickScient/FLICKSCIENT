@@ -7,7 +7,7 @@ import {
   ChevronRight, BarChart2, Clock, Zap, Award, Download,
   Bookmark, Menu, Settings, User, ChevronDown, ChevronUp,
   PlayCircle, TvMinimal, Clapperboard, RefreshCw, Sparkles,
-  Sun, Moon,
+  Sun, Moon, Eye, EyeOff, MessageSquare, Send,
 } from 'lucide-react';
 import FlickScient from './FlickScient';
 
@@ -117,12 +117,13 @@ function MovieSyncLogo({ size = 32, className = '' }: { size?: number; className
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 function LoginScreen() {
-  const [mode, setMode]         = useState('login');
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading]   = useState(false);
-  const [msg, setMsg]           = useState({ text: '', ok: false });
+  const [mode, setMode]             = useState('login');
+  const [email, setEmail]           = useState('');
+  const [password, setPassword]     = useState('');
+  const [loading, setLoading]       = useState(false);
+  const [msg, setMsg]               = useState({ text: '', ok: false });
   const [forgotMode, setForgotMode] = useState(false);
+  const [showPwd, setShowPwd]       = useState(false);
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -235,8 +236,14 @@ function LoginScreen() {
               <form onSubmit={handleAuth} className="space-y-3">
                 <input type="email" placeholder="Email address" required value={email}
                   className={inputCls} onChange={e => setEmail(e.target.value)} />
-                <input type="password" placeholder="Password" required value={password}
-                  className={inputCls} onChange={e => setPassword(e.target.value)} />
+                <div className="relative">
+                  <input type={showPwd ? 'text' : 'password'} placeholder="Password" required value={password}
+                    className={inputCls + ' pr-12'} onChange={e => setPassword(e.target.value)} />
+                  <button type="button" onClick={() => setShowPwd(v => !v)} tabIndex={-1}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400 transition-colors">
+                    {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
 
                 {msg.text && (
                   <p className={`text-[12px] text-center font-medium px-3 py-2.5 rounded-xl ${msg.ok ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
@@ -284,6 +291,19 @@ function DrawerMenu({ open, onClose, user, onLogout, onOpenSeed, lightMode, onTo
   const email = user?.email || '';
   const initials = email ? email[0].toUpperCase() : '?';
   const avatarGradient = AVATAR_GRADIENTS[(email ? email.charCodeAt(0) : 0) % 8];
+  const [feedbackText, setFeedbackText]   = useState('');
+  const [feedbackStatus, setFeedbackStatus] = useState('idle'); // idle | sending | done | error
+
+  const submitFeedback = async () => {
+    if (!feedbackText.trim() || feedbackStatus === 'sending') return;
+    setFeedbackStatus('sending');
+    const { error } = await supabase.from('user_feedback').insert({ user_id: user?.id, message: feedbackText.trim() });
+    if (error) { setFeedbackStatus('error'); return; }
+    setFeedbackText('');
+    setFeedbackStatus('done');
+    setTimeout(() => setFeedbackStatus('idle'), 3500);
+  };
+
   return (
     <>
       <div
@@ -295,7 +315,7 @@ function DrawerMenu({ open, onClose, user, onLogout, onOpenSeed, lightMode, onTo
         <div className="pt-14 pb-6 px-6 border-b border-white/5">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-black flex-shrink-0 shadow-lg"
-              style={{ background: avatarGradient }}>
+              style={{ background: avatarGradient, backgroundImage: avatarGradient }}>
               {initials}
             </div>
             <div className="min-w-0">
@@ -320,6 +340,39 @@ function DrawerMenu({ open, onClose, user, onLogout, onOpenSeed, lightMode, onTo
           <DrawerItem icon={<User size={18} />} label="Profile" sub={email} onClick={onClose} />
         </div>
 
+        {/* CORDIAL Feedback */}
+        <div className="px-4 pt-4 pb-3 border-t border-white/5">
+          <div className="flex items-center gap-2 mb-2.5">
+            <MessageSquare size={13} className="text-gray-600" />
+            <p className="text-[9px] uppercase tracking-[0.2em] text-gray-600 font-black">CORDIAL Feedback</p>
+          </div>
+          {feedbackStatus === 'done' ? (
+            <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 text-center">
+              <p className="text-green-400 text-xs font-black">✓ Thank you! Feedback received.</p>
+            </div>
+          ) : (
+            <>
+              <textarea
+                value={feedbackText}
+                onChange={e => setFeedbackText(e.target.value)}
+                placeholder="Bug, idea, or just a thought…"
+                rows={3}
+                className="w-full bg-[#0d0d12] text-white text-xs p-3 rounded-xl border border-white/10 outline-none focus:border-yellow-500/30 resize-none placeholder-gray-700 leading-relaxed"
+              />
+              {feedbackStatus === 'error' && (
+                <p className="text-red-400 text-[10px] mt-1">Failed — try again.</p>
+              )}
+              <button onClick={submitFeedback}
+                disabled={!feedbackText.trim() || feedbackStatus === 'sending'}
+                className="w-full mt-2 flex items-center justify-center gap-2 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 text-xs font-bold py-2.5 rounded-xl hover:bg-yellow-500/20 transition-all disabled:opacity-40 active:scale-[0.98]">
+                <Send size={12} />
+                {feedbackStatus === 'sending' ? 'Sending…' : 'Submit'}
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Logout + credit */}
         <div className="px-4 pb-8 border-t border-white/5 pt-4">
           <button onClick={() => { onLogout(); onClose(); }}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-red-900/20 text-red-400 border border-red-900/30 hover:bg-red-900/30 transition-colors">
