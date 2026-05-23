@@ -13,6 +13,8 @@ const REQUEST_TIMEOUT    = 25000
 const MAX_NAME_FREQUENCY = 0.10
 const NAME_COOLDOWN_MS   = 300000
 const MAX_MEMORY_REFS    = 2
+const PRIMARY_MODEL      = 'llama-3.1-8b-instant'
+const FALLBACK_MODEL     = 'llama-3.3-70b-versatile'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface TasteProfile {
@@ -508,7 +510,7 @@ serve(async (req) => {
             'Authorization': `Bearer ${apiKey}`,
           },
           body   : JSON.stringify({
-            model      : 'llama-3.1-8b-instant',
+            model      : PRIMARY_MODEL,
             messages   : [
               { role: 'system', content: finalSystemPrompt },
               ...geminiContents,
@@ -533,6 +535,48 @@ serve(async (req) => {
     }
 
     clearTimeout(timeoutId)
+
+    // ── Auto-fallback: if primary model hits rate limit, silently retry ────────
+    if (geminiRes.status === 429) {
+      console.warn('[FlickScient] Primary model rate-limited — switching to fallback model')
+      clearTimeout(timeoutId)
+      const fallbackController = new AbortController()
+      const fallbackTimeoutId  = setTimeout(() => fallbackController.abort(), REQUEST_TIMEOUT)
+      try {
+        geminiRes = await fetch(
+          'https://api.groq.com/openai/v1/chat/completions',
+          {
+            method : 'POST',
+            headers: {
+              'Content-Type' : 'application/json',
+              'Authorization': `Bearer ${apiKey}`,
+            },
+            body   : JSON.stringify({
+              model      : FALLBACK_MODEL,
+              messages   : [
+                { role: 'system', content: finalSystemPrompt },
+                ...geminiContents,
+              ],
+              stream     : true,
+              temperature: 1.05,
+              top_p      : 0.97,
+              max_tokens : maxTokens,
+            }),
+            signal: fallbackController.signal,
+          }
+        )
+        clearTimeout(fallbackTimeoutId)
+      } catch (e: any) {
+        clearTimeout(fallbackTimeoutId)
+        if (e.name === 'AbortError') {
+          return new Response(
+            JSON.stringify({ message: "Brain's buffering 🛠️ Give me a sec and hit me again." }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        throw e
+      }
+    }
 
     if (!geminiRes.ok) {
       const errText = await geminiRes.text()
