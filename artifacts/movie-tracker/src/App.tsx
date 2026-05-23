@@ -251,9 +251,21 @@ function LoginScreen() {
 }
 
 // ─── Drawer Menu ──────────────────────────────────────────────────────────────
+const AVATAR_GRADIENTS = [
+  'linear-gradient(135deg,#a855f7,#ec4899)',  // 0 purple → pink
+  'linear-gradient(135deg,#f97316,#ef4444)',  // 1 orange → red
+  'linear-gradient(135deg,#3b82f6,#06b6d4)',  // 2 blue → cyan
+  'linear-gradient(135deg,#10b981,#84cc16)',  // 3 emerald → lime
+  'linear-gradient(135deg,#d946ef,#6366f1)',  // 4 fuchsia → indigo
+  'linear-gradient(135deg,#f59e0b,#10b981)',  // 5 amber → emerald
+  'linear-gradient(135deg,#06b6d4,#8b5cf6)',  // 6 cyan → violet
+  'linear-gradient(135deg,#f43f5e,#f97316)',  // 7 rose → orange
+];
+
 function DrawerMenu({ open, onClose, user, onLogout, onOpenSeed, lightMode, onToggleLight }) {
   const email = user?.email || '';
   const initials = email ? email[0].toUpperCase() : '?';
+  const avatarGradient = AVATAR_GRADIENTS[(email ? email.charCodeAt(0) : 0) % 8];
   return (
     <>
       <div
@@ -264,7 +276,8 @@ function DrawerMenu({ open, onClose, user, onLogout, onOpenSeed, lightMode, onTo
         {/* Profile */}
         <div className="pt-14 pb-6 px-6 border-b border-white/5">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-yellow-500 flex items-center justify-center text-black text-xl font-black flex-shrink-0">
+            <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-black flex-shrink-0 shadow-lg"
+              style={{ background: avatarGradient }}>
               {initials}
             </div>
             <div className="min-w-0">
