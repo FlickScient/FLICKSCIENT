@@ -130,6 +130,36 @@ async function fetchKnowledgeBase(): Promise<string> {
   }
 }
 
+// ─── Grounding Intent Detector ────────────────────────────────────────────────
+function needsGrounding(input: string): boolean {
+  return /\b(movie|film|series|show|tv show|song|music|album|artist|singer|director|actor|actress|box office|trending|latest|new release|out now|streaming|netflix|prime video|disney\+|hbo|max|cinema|soundtrack|ost|score|band|chart|hit|billboard|imdb|rotten tomatoes|metacritic|release date|cast|sequel|prequel|remake|award|oscar|grammy|cannes|bafta|golden globe|review|rating|plot|trailer|premiere|season|episode|lyrics|music video|concert|tour)\b/i.test(input)
+}
+
+// ─── Gemini Grounding Fetch ────────────────────────────────────────────────────
+async function fetchGroundingContext(query: string, geminiKey: string): Promise<string> {
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+      {
+        method : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body   : JSON.stringify({
+          contents        : [{ parts: [{ text: `Find accurate, current facts about this: ${query}` }] }],
+          tools           : [{ googleSearch: {} }],
+          generationConfig: { temperature: 0.1, maxOutputTokens: 800 },
+        }),
+        signal: AbortSignal.timeout(8000),
+      }
+    )
+    if (!res.ok) return ''
+    const data = await res.json()
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+    return text.trim().slice(0, 3000)
+  } catch {
+    return ''
+  }
+}
+
 // ─── Build System Prompt ──────────────────────────────────────────────────────
 function buildSystemPrompt(
   userMemory     : UserMemory | null,
@@ -342,6 +372,7 @@ serve(async (req) => {
 
   // ── Pull env vars up-front (never throws) ─────────────────────────────────
   const apiKey       = Deno.env.get('GROQ_API_KEY')
+  const geminiKey    = Deno.env.get('GEMINI_API_KEY') || ''
   const sbUrl        = Deno.env.get('SUPABASE_URL')
   const sbKey        = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   const creatorEmail = (Deno.env.get('CREATOR_EMAIL') || '').toLowerCase().trim()
@@ -431,9 +462,17 @@ serve(async (req) => {
     )
 
     // ── If asking about Mahid — force the answer as conversation opener ───────
-    // Gemini continues FROM this answer instead of being asked to produce it
-    // This makes dodging impossible — the answer is already written
+    // Groq continues FROM this answer — dodging impossible, answer already written
     const mahidOpener = askingAboutMahid ? buildMahidAnswer(isVerifiedMahid) : ''
+
+    // ── Gemini grounding: fetch live facts for movie/song/info queries ────────
+    const groundingCtx = (!greeting && geminiKey && needsGrounding(userPrompt))
+      ? await fetchGroundingContext(userPrompt, geminiKey)
+      : ''
+
+    const finalSystemPrompt = groundingCtx
+      ? `${systemPrompt}\n\n### REAL-TIME GROUNDING CONTEXT\nThe following facts were retrieved live via Google Search moments before this message. Treat them as current truth. Weave them naturally — never say "according to my search results".\n\n${groundingCtx}`
+      : systemPrompt
 
     // ── Build multi-turn history for Groq (OpenAI message format) ────────────
     const historyContents = conversationHistory
@@ -471,7 +510,7 @@ serve(async (req) => {
           body   : JSON.stringify({
             model      : 'llama-3.1-8b-instant',
             messages   : [
-              { role: 'system', content: systemPrompt },
+              { role: 'system', content: finalSystemPrompt },
               ...geminiContents,
             ],
             stream     : true,
