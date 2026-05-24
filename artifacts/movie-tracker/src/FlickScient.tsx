@@ -23,20 +23,17 @@ const MOOD_PILLS = [
   { emoji: '⚡', label: 'Hype Mode',     prompt: 'Give me the most hype, high-energy, adrenaline-pumping film possible. Something that gets the blood pumping.' },
 ];
 
-// ─── Chat History Utils (Supabase) ───────────────────────────────────────────
-// SQL to run once in Supabase:
-// create table if not exists flickscient_conversations (
-//   id uuid primary key default gen_random_uuid(),
-//   user_id uuid not null references auth.users(id) on delete cascade,
-//   session_id text not null,
-//   title text,
-//   messages jsonb not null default '[]',
-//   created_at timestamptz default now(),
-//   updated_at timestamptz default now(),
-//   unique(user_id, session_id)
-// );
+// ─── Chat History Utils (Supabase — chat_sessions) ───────────────────────────
 
-const MAX_SESSIONS = 40;
+const MAX_SESSIONS = 20;
+
+async function hashUserId(userId) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(userId));
+  return Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 16);
+}
 
 function sessionTitle(messages) {
   const first = messages.find(m => m.sender === 'user');
@@ -45,10 +42,11 @@ function sessionTitle(messages) {
 }
 
 async function loadSupabaseSessions(userId) {
+  const hash = await hashUserId(userId);
   const { data } = await supabase
-    .from('flickscient_conversations')
+    .from('chat_sessions')
     .select('session_id, title, messages, updated_at')
-    .eq('user_id', userId)
+    .eq('user_id_hash', hash)
     .order('updated_at', { ascending: false })
     .limit(MAX_SESSIONS);
   return (data || []).map(row => ({
@@ -60,18 +58,20 @@ async function loadSupabaseSessions(userId) {
 }
 
 async function saveSupabaseSession(userId, session) {
-  await supabase.from('flickscient_conversations').upsert({
-    user_id:    userId,
-    session_id: session.id,
-    title:      session.title,
-    messages:   session.messages,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'user_id,session_id' });
+  const hash = await hashUserId(userId);
+  await supabase.from('chat_sessions').upsert({
+    user_id_hash: hash,
+    session_id:   session.id,
+    title:        session.title,
+    messages:     session.messages,
+    updated_at:   new Date().toISOString(),
+  }, { onConflict: 'user_id_hash,session_id' });
 }
 
 async function deleteSupabaseSession(userId, sessionId) {
-  await supabase.from('flickscient_conversations')
-    .delete().eq('user_id', userId).eq('session_id', sessionId);
+  const hash = await hashUserId(userId);
+  await supabase.from('chat_sessions')
+    .delete().eq('user_id_hash', hash).eq('session_id', sessionId);
 }
 
 function fmtDate(ts) {
@@ -462,12 +462,14 @@ export default function FlickScient({ myList }) {
   const [loading,        setLoading]        = useState(false);
   const [isStreaming,    setIsStreaming]     = useState(false);
   const [aiTab,          setAiTab]          = useState('chat');
-  const [sessionId,      setSessionId]      = useState(() => 'sid_' + Date.now());
+  const [sessionId,      setSessionId]      = useState(() => crypto.randomUUID());
   const [sessions,       setSessions]       = useState([]);
   const [selectedMovie,  setSelectedMovie]  = useState(null);
+  const [countdown,      setCountdown]      = useState(0);
   const chatBottomRef    = useRef(null);
   const textareaRef      = useRef(null);
   const currentUserIdRef = useRef(null);
+  const countdownRef     = useRef(null);
 
   useEffect(() => { chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
 
@@ -507,7 +509,7 @@ export default function FlickScient({ myList }) {
   const watchlistTitles = myList.filter(m => m.status === 'watchlist').map(m => m.title).join(', ');
 
   const sendMessage = async (text) => {
-    if (!text.trim() || loading) return;
+    if (!text.trim() || loading || countdown > 0) return;
     const userQuery = text.trim();
     const conversationHistory = messages
       .filter(m => m.id !== 'welcome')
@@ -529,11 +531,21 @@ export default function FlickScient({ myList }) {
             'Authorization': `Bearer ${authToken}`,
             'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
           },
-          body: JSON.stringify({ prompt: userQuery, userId, conversationHistory, watched: watchedTitles || '', watchlist: watchlistTitles || '' }),
+          body: JSON.stringify({ prompt: userQuery, userId, sessionId, conversationHistory, watched: watchedTitles || '', watchlist: watchlistTitles || '' }),
         }
       );
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
+        if (errData.retryAfter > 0) {
+          let secs = Math.ceil(errData.retryAfter);
+          setCountdown(secs);
+          if (countdownRef.current) clearInterval(countdownRef.current);
+          countdownRef.current = setInterval(() => {
+            secs -= 1;
+            setCountdown(secs);
+            if (secs <= 0) { clearInterval(countdownRef.current); countdownRef.current = null; }
+          }, 1000);
+        }
         throw new Error(errData.message || `Request failed (${response.status})`);
       }
       const msgId = String(Date.now() + 1);
@@ -573,7 +585,7 @@ export default function FlickScient({ myList }) {
   const handleSyncSend = (prompt) => { setAiTab('chat'); sendMessage(prompt); };
 
   const startNewChat = () => {
-    setSessionId('sid_' + Date.now());
+    setSessionId(crypto.randomUUID());
     setMessages([{ id: 'welcome', sender: 'ai', text: randomWelcome() }]);
     setAiTab('chat');
     setInput('');
@@ -783,12 +795,15 @@ export default function FlickScient({ myList }) {
                 }
               }}
             />
-            <button type="submit" disabled={loading || !input.trim()}
+            <button type="submit" disabled={loading || !input.trim() || countdown > 0}
               className="absolute right-3 bottom-3 text-purple-400 hover:text-purple-300 disabled:opacity-30 transition-all p-2.5 rounded-xl hover:bg-purple-500/10">
               <Send size={18} strokeWidth={2.5} />
             </button>
           </form>
-          <p className="text-[9px] text-gray-700 text-center mt-1.5">Enter to send · Shift+Enter for new line</p>
+          {countdown > 0
+            ? <p className="text-[9px] text-amber-500 font-bold text-center mt-1.5">Try again in {countdown}s…</p>
+            : <p className="text-[9px] text-gray-700 text-center mt-1.5">Enter to send · Shift+Enter for new line</p>
+          }
         </div>
       </>}
 

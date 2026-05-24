@@ -277,20 +277,35 @@ function LoginScreen() {
 
 // ─── Drawer Menu ──────────────────────────────────────────────────────────────
 const AVATAR_GRADIENTS = [
-  'linear-gradient(135deg,#a855f7,#ec4899)',  // 0 purple → pink
-  'linear-gradient(135deg,#f97316,#ef4444)',  // 1 orange → red
-  'linear-gradient(135deg,#3b82f6,#06b6d4)',  // 2 blue → cyan
-  'linear-gradient(135deg,#10b981,#84cc16)',  // 3 emerald → lime
-  'linear-gradient(135deg,#d946ef,#6366f1)',  // 4 fuchsia → indigo
-  'linear-gradient(135deg,#f59e0b,#10b981)',  // 5 amber → emerald
-  'linear-gradient(135deg,#06b6d4,#8b5cf6)',  // 6 cyan → violet
-  'linear-gradient(135deg,#f43f5e,#f97316)',  // 7 rose → orange
+  'linear-gradient(135deg,#a855f7,#ec4899)',
+  'linear-gradient(135deg,#f97316,#ef4444)',
+  'linear-gradient(135deg,#3b82f6,#06b6d4)',
+  'linear-gradient(135deg,#10b981,#34d399)',
+  'linear-gradient(135deg,#d946ef,#6366f1)',
+  'linear-gradient(135deg,#f59e0b,#ef4444)',
+  'linear-gradient(135deg,#06b6d4,#8b5cf6)',
+  'linear-gradient(135deg,#f43f5e,#f97316)',
+  'linear-gradient(135deg,#8b5cf6,#3b82f6)',
+  'linear-gradient(135deg,#ec4899,#f97316)',
+  'linear-gradient(135deg,#0ea5e9,#10b981)',
+  'linear-gradient(135deg,#f43f5e,#8b5cf6)',
+  'linear-gradient(135deg,#eab308,#f97316)',
+  'linear-gradient(135deg,#6366f1,#ec4899)',
+  'linear-gradient(135deg,#14b8a6,#6366f1)',
+  'linear-gradient(135deg,#c026d3,#3b82f6)',
 ];
+
+function avatarHash(email) {
+  if (!email) return 0;
+  let h = 0;
+  for (let i = 0; i < email.length; i++) { h = Math.imul(31, h) + email.charCodeAt(i) | 0; }
+  return Math.abs(h) % AVATAR_GRADIENTS.length;
+}
 
 function DrawerMenu({ open, onClose, user, onLogout, onOpenSeed, lightMode, onToggleLight }) {
   const email = user?.email || '';
   const initials = email ? email[0].toUpperCase() : '?';
-  const avatarGradient = AVATAR_GRADIENTS[(email ? email.charCodeAt(0) : 0) % 8];
+  const avatarGradient = AVATAR_GRADIENTS[avatarHash(email)];
   const [feedbackText, setFeedbackText]   = useState('');
   const [feedbackStatus, setFeedbackStatus] = useState('idle'); // idle | sending | done | error
 
@@ -314,8 +329,8 @@ function DrawerMenu({ open, onClose, user, onLogout, onOpenSeed, lightMode, onTo
         {/* Profile */}
         <div className="pt-14 pb-6 px-6 border-b border-white/5">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-black flex-shrink-0 shadow-lg"
-              style={{ background: avatarGradient, backgroundImage: avatarGradient }}>
+            <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-black flex-shrink-0"
+              style={{ background: avatarGradient, backgroundImage: avatarGradient, boxShadow: '0 0 0 2px rgba(255,255,255,0.08), 0 4px 20px rgba(0,0,0,0.5)' }}>
               {initials}
             </div>
             <div className="min-w-0">
