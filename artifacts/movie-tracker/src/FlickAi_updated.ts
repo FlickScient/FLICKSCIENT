@@ -35,6 +35,10 @@ interface UserMemory {
   last_name_used_at?     : number
   memory_reference_count?: number
   is_creator?            : boolean
+  session_count?         : number
+  last_active_hour?      : number
+  topics_discussed?      : string[]
+  films_considered?      : string[]
 }
 
 // ─── Hash user ID ─────────────────────────────────────────────────────────────
@@ -180,32 +184,46 @@ function buildSystemPrompt(
 Learn their soul in the first two exchanges. Don't interrogate them.
 Ask ONE thing that reveals everything: "What's the last film that actually did something to you?"`
     }
-    const p         = userMemory.taste_profile
-    const loved     = p.loved_movies?.slice(0, 6).join(', ')  || ''
-    const genres    = p.favorite_genres?.join(', ')            || ''
-    const directors = p.favorite_directors?.join(', ')         || ''
-    const actors    = p.favorite_actors?.join(', ')            || ''
-    const composers = p.favorite_composers?.join(', ')         || ''
-    const disliked  = p.disliked_movies?.join(', ')            || ''
-    const mood      = p.mood_patterns?.join(', ')              || ''
-    const style     = p.viewing_style                          || ''
-    const summary   = userMemory.conversation_summary          || ''
-    const name      = userMemory.name                          || ''
+    const p                = userMemory.taste_profile
+    const loved            = p.loved_movies?.slice(0, 6).join(', ')  || ''
+    const genres           = p.favorite_genres?.join(', ')            || ''
+    const directors        = p.favorite_directors?.join(', ')         || ''
+    const actors           = p.favorite_actors?.join(', ')            || ''
+    const composers        = p.favorite_composers?.join(', ')         || ''
+    const disliked         = p.disliked_movies?.join(', ')            || ''
+    const mood             = p.mood_patterns?.join(', ')              || ''
+    const style            = p.viewing_style                          || ''
+    const summary          = userMemory.conversation_summary          || ''
+    const name             = userMemory.name                          || ''
+    const sessions         = userMemory.session_count                 || 0
+    const activeHour       = userMemory.last_active_hour              ?? -1
+    const topics           = userMemory.topics_discussed?.slice(0, 8).join(', ') || ''
+    const considered       = userMemory.films_considered?.slice(0, 5).join(', ') || ''
+
+    const timeOfDay = activeHour >= 5 && activeHour < 12 ? 'morning person'
+                    : activeHour >= 12 && activeHour < 18 ? 'afternoon watcher'
+                    : activeHour >= 18 && activeHour < 23 ? 'night owl'
+                    : activeHour >= 23 || activeHour < 5 ? 'late-night cinema mode'
+                    : ''
 
     return `
 You know this person. Not surface level — deep. Their taste is wired into you.
 
 THEIR CINEMA DNA:
-${name      ? `→ Their name: ${name} — use it at most once, only if it flows naturally. Never forced.` : `→ You don't know their name yet. Learn it naturally, don't ask directly.`}
-${loved     ? `→ Films they've loved: ${loved}` : ''}
-${genres    ? `→ Their genres: ${genres}` : ''}
-${directors ? `→ Directors they ride for: ${directors}` : ''}
-${actors    ? `→ Actors they vibe with: ${actors}` : ''}
-${composers ? `→ Composers that hit for them: ${composers}` : ''}
-${disliked  ? `→ Films they've rejected: ${disliked} — NEVER recommend anything from this DNA strand` : ''}
-${mood      ? `→ Their mood patterns: ${mood}` : ''}
-${style     ? `→ How they watch: ${style}` : ''}
-${summary   ? `→ What you already know about them: ${summary}` : ''}
+${name        ? `→ Their name: ${name} — use it at most once, only if it flows naturally. Never forced.` : `→ You don't know their name yet. Learn it naturally, don't ask directly.`}
+${loved       ? `→ Films they've loved: ${loved}` : ''}
+${genres      ? `→ Their genres: ${genres}` : ''}
+${directors   ? `→ Directors they ride for: ${directors}` : ''}
+${actors      ? `→ Actors they vibe with: ${actors}` : ''}
+${composers   ? `→ Composers that hit for them: ${composers}` : ''}
+${disliked    ? `→ Films they've rejected: ${disliked} — NEVER recommend anything from this DNA strand` : ''}
+${mood        ? `→ Their mood patterns: ${mood}` : ''}
+${style       ? `→ How they watch: ${style}` : ''}
+${timeOfDay   ? `→ They're usually a ${timeOfDay}` : ''}
+${sessions > 1 ? `→ They've had ${sessions} sessions with you — they keep coming back` : ''}
+${topics      ? `→ Topics you've covered together: ${topics}` : ''}
+${considered  ? `→ Films they've almost picked but skipped: ${considered} — might be worth revisiting` : ''}
+${summary     ? `→ What you already know about them: ${summary}` : ''}
 
 This is how you think. Every rec, every hook must be filtered through this lens.
 Make them feel genuinely seen. Not profiled. Seen.`.trim()
@@ -336,10 +354,13 @@ Extract signal. Ignore noise. Return existing profile unchanged if nothing new r
 Name: only if user explicitly stated their own name. Null otherwise.
 Viewing style: "solo deep-focus", "social watch party", "background comfort", or "mixed"
 
-For updated_summary: Write 2-4 sentences covering TWO things:
+topics_discussed: short labels of what was discussed (e.g. "emotional films", "2000s horror", "Hans Zimmer scores"). Max 5 new items.
+films_considered: films the user showed interest in but did NOT commit to watching (e.g. asked about it, almost picked it, said "maybe"). Max 5.
+
+For updated_summary: Write 2-4 sentences covering:
 1. What kind of film/music person they are and what they want from cinema.
-2. What was actually discussed or recommended in this exchange — specific films, topics, moods mentioned. This lets the AI reference previous conversations naturally next time.
-Keep it conversational, not clinical. Example: "They love slow-burn thrillers and Korean cinema. Last chat they asked about emotional films and were recommended Aftersun and The Worst Person in the World. They seem to be in a reflective mood lately."
+2. What was actually discussed or recommended this session — specific titles, moods, topics. So the AI can reference it next time naturally.
+Example: "They love slow-burn thrillers and Korean cinema. Last chat they asked about emotional films and were recommended Aftersun and The Worst Person in the World. They seem to be in a reflective mood lately."
 
 Return ONLY raw JSON. Zero markdown. Zero text outside the object.
 
@@ -355,6 +376,8 @@ Return ONLY raw JSON. Zero markdown. Zero text outside the object.
     "viewing_style": ""
   },
   "updated_summary": "2-4 sentences covering their taste AND what was discussed/recommended this session.",
+  "topics_discussed": [],
+  "films_considered": [],
   "detected_name": null
 }`.trim()
 }
@@ -430,7 +453,7 @@ serve(async (req) => {
       if (hashedUserId) {
         const { data, error } = await supabase
           .from('flickscient_users')
-          .select('name, taste_profile, conversation_summary, last_name_used_at, memory_reference_count, is_creator')
+          .select('name, taste_profile, conversation_summary, last_name_used_at, memory_reference_count, is_creator, session_count, last_active_hour, topics_discussed, films_considered')
           .eq('user_id_hash', hashedUserId)
           .maybeSingle()
 
@@ -771,12 +794,30 @@ async function updateUserMemory(
 
     const mergedTaste = mergeTasteProfiles(existingMemory.taste_profile, extracted.updated_taste_profile)
 
+    // Merge topics_discussed (deduplicate, keep latest 20)
+    const mergedTopics = [...new Set([
+      ...(existingMemory.topics_discussed || []),
+      ...(extracted.topics_discussed || []),
+    ])].slice(-20)
+
+    // Merge films_considered (deduplicate, keep latest 15)
+    const mergedConsidered = [...new Set([
+      ...(existingMemory.films_considered || []),
+      ...(extracted.films_considered || []),
+    ])].slice(-15)
+
+    const nowHour = new Date().getUTCHours()
+
     const upsertPayload: Record<string, any> = {
       user_id_hash          : hashedUserId,
       taste_profile         : mergedTaste,
       conversation_summary  : extracted.updated_summary || existingMemory.conversation_summary,
       updated_at            : new Date().toISOString(),
       memory_reference_count: memoryRefCount,
+      session_count         : (existingMemory.session_count || 0) + 1,
+      last_active_hour      : nowHour,
+      topics_discussed      : mergedTopics,
+      films_considered      : mergedConsidered,
     }
 
     if (extracted.detected_name && !existingMemory.name) {

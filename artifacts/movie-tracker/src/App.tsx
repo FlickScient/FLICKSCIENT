@@ -2002,9 +2002,10 @@ useEffect(() => {
   }, []);
 
   useEffect(() => {
-    if (user && !localStorage.getItem('moviesync_welcomed')) {
-      setShowWelcome(true);
-    }
+    if (!user) return;
+    const createdAt = user.created_at ? new Date(user.created_at).getTime() : 0;
+    const isNewUser = Date.now() - createdAt < 5 * 60 * 1000; // within 5 minutes of signup
+    if (isNewUser) setShowWelcome(true);
   }, [user]);
 
   useEffect(() => { if (user) fetchMovies(); else setMovies([]); }, [user]);
@@ -2088,7 +2089,6 @@ useEffect(() => {
         <WelcomeModal
           user={user}
           onDismiss={() => {
-            localStorage.setItem('moviesync_welcomed', '1');
             setShowWelcome(false);
           }}
         />
