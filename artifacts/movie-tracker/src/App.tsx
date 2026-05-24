@@ -1954,12 +1954,24 @@ export default function App() {
   const [view,        setViewState]  = useState(getViewFromHash);
   const [showSeed,    setShowSeed]   = useState(false);
   const [drawerOpen,  setDrawerOpen] = useState(false);
-  const [lightMode,   setLightMode]  = useState(() => localStorage.getItem('lm') === 'true');
+  const [lightMode,   setLightMode]  = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
+
+  // Load theme from Supabase profiles when user logs in
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('profiles').select('light_mode').eq('id', user.id).maybeSingle()
+      .then(({ data }) => {
+        if (data && typeof data.light_mode === 'boolean') setLightMode(data.light_mode);
+      });
+  }, [user]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('light', lightMode);
-    localStorage.setItem('lm', String(lightMode));
+    // Save to Supabase if logged in, else skip
+    if (user) {
+      supabase.from('profiles').upsert({ id: user.id, light_mode: lightMode }, { onConflict: 'id' });
+    }
   }, [lightMode]);
 
   const setView = (v) => {
