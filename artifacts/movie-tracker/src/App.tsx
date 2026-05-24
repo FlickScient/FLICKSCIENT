@@ -451,7 +451,7 @@ function DrawerItem({ icon, label, sub, onClick }) {
 }
 
 // ─── Movie Detail Modal ───────────────────────────────────────────────────────
-function MovieDetailModal({ movie, onClose, onToggle, onRate, onDelete, onEpisodeUpdate }) {
+function MovieDetailModal({ movie, onClose, onToggle, onRate, onDelete, onEpisodeUpdate, onSetStatus }) {
   const [details,  setDetails]  = useState(null);
   const [cast,     setCast]     = useState([]);
   const [loading,  setLoading]  = useState(true);
@@ -582,24 +582,39 @@ function MovieDetailModal({ movie, onClose, onToggle, onRate, onDelete, onEpisod
           </div>
 
           {/* Action buttons */}
-          <div className="flex gap-2 mb-5">
+          <div className="flex gap-2 mb-3">
+            <button onClick={() => {
+                if (movie.status === 'watchlist') {
+                  onSetStatus(movie.id, 'unwatched');
+                } else {
+                  onSetStatus(movie.id, 'watchlist');
+                }
+              }}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl text-xs font-black transition-all border ${
+                movie.status === 'watchlist' ? 'bg-blue-900/40 text-blue-400 border-blue-800/50' : 'bg-[#1c1c26] text-gray-400 border-white/10 hover:text-blue-400'
+              }`}>
+              <Bookmark size={14} fill={movie.status === 'watchlist' ? 'currentColor' : 'none'} />
+              {movie.status === 'watchlist' ? 'In Watchlist' : 'Watchlist'}
+            </button>
             <button onClick={() => onToggle(movie.id, 'watched', movie.watched)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl text-xs font-black transition-all ${
-                movie.watched ? 'bg-green-900/50 text-green-400 border border-green-800/50' : 'bg-[#1c1c26] text-gray-400 border border-white/10 hover:text-white'
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl text-xs font-black transition-all border ${
+                movie.watched ? 'bg-green-900/50 text-green-400 border-green-800/50' : 'bg-[#1c1c26] text-gray-400 border-white/10 hover:text-white'
               }`}>
               <CheckCircle size={14} />
               {movie.watched ? 'Watched' : 'Mark Watched'}
             </button>
+          </div>
+          <div className="flex gap-2 mb-5">
             <button onClick={() => onToggle(movie.id, 'favorite', movie.favorite)}
-              className={`px-4 py-2.5 rounded-2xl border flex items-center gap-1.5 text-xs font-black transition-all ${
+              className={`flex-1 px-4 py-2 rounded-2xl border flex items-center justify-center gap-1.5 text-xs font-black transition-all ${
                 movie.favorite ? 'bg-red-900/30 text-red-400 border-red-800/40' : 'bg-[#1c1c26] text-gray-500 border-white/10 hover:text-red-400'
               }`}>
               <Heart size={14} fill={movie.favorite ? 'currentColor' : 'none'} />
-              Fave
+              Favourite
             </button>
             <button onClick={() => { onDelete(movie.id); onClose(); }}
-              className="px-3 py-2.5 rounded-2xl bg-[#1c1c26] border border-white/10 text-gray-600 hover:text-red-500 transition-colors">
-              <Trash2 size={14} />
+              className="px-4 py-2 rounded-2xl bg-[#1c1c26] border border-white/10 text-gray-600 hover:text-red-500 transition-colors flex items-center gap-1.5 text-xs font-black">
+              <Trash2 size={14} /> Remove
             </button>
           </div>
 
@@ -1494,7 +1509,7 @@ function StatsPage({ movies }) {
 }
 
 // ─── Library Page ─────────────────────────────────────────────────────────────
-function LibraryPage({ movies, onToggle, onDelete, onRate, onLogout, onOpenSeed, user, onOpenDrawer, onEpisodeUpdate }) {
+function LibraryPage({ movies, onToggle, onDelete, onRate, onLogout, onOpenSeed, user, onOpenDrawer, onEpisodeUpdate, onSetStatus }) {
   const [libSearch,        setLibSearch]        = useState('');
   const [statusFilter,     setStatusFilter]     = useState('all');
   const [mediaTypeFilter,  setMediaTypeFilter]  = useState('all'); // all | movie | tv
@@ -1559,7 +1574,19 @@ function LibraryPage({ movies, onToggle, onDelete, onRate, onLogout, onOpenSeed,
         <MovieDetailModal
           movie={selectedMovie}
           onClose={() => setSelectedMovie(null)}
-          onToggle={(id, field, val) => { onToggle(id, field, val); setSelectedMovie(prev => prev ? {...prev, [field]: !val} : null); }}
+          onToggle={(id, field, val) => {
+            onToggle(id, field, val);
+            setSelectedMovie(prev => {
+              if (!prev) return null;
+              const newVal = !val;
+              const extra = field === 'watched' ? { status: newVal ? 'watched' : 'unwatched' } : {};
+              return { ...prev, [field]: newVal, ...extra };
+            });
+          }}
+          onSetStatus={(id, status) => {
+            onSetStatus(id, status);
+            setSelectedMovie(prev => prev ? { ...prev, status, watched: status === 'watched' } : null);
+          }}
           onRate={(id, rating) => { onRate(id, rating); setSelectedMovie(prev => prev ? {...prev, rating} : null); }}
           onDelete={(id) => { onDelete(id); setSelectedMovie(null); }}
           onEpisodeUpdate={(id, ep, total) => { onEpisodeUpdate(id, ep, total); setSelectedMovie(prev => prev ? {...prev, episodes_watched: ep, total_episodes: total} : null); }}
@@ -1783,7 +1810,7 @@ function LibraryPage({ movies, onToggle, onDelete, onRate, onLogout, onOpenSeed,
                           isWatched ? 'bg-green-900/40 text-green-400' : 'bg-[#1c1c26] text-gray-500 hover:text-gray-300'
                         }`}>
                         <CheckCircle size={12} strokeWidth={2.5} />
-                        {isWatched ? 'Watched' : 'Unwatched'}
+                        {isWatched ? 'Watched' : 'Mark Watched'}
                       </button>
                     )}
                     <button onClick={() => onToggle(movie.id, 'favorite', movie.favorite)}
@@ -2035,6 +2062,12 @@ useEffect(() => {
     await supabase.from('movies').update({ [field]: newVal, ...extra }).eq('id', id);
   };
 
+  const setMovieStatus = async (id, status) => {
+    const watched = status === 'watched';
+    setMovies(prev => prev.map(m => m.id === id ? { ...m, status, watched } : m));
+    await supabase.from('movies').update({ status, watched }).eq('id', id);
+  };
+
   const rateMovie = async (id, rating) => {
     setMovies(prev => prev.map(m => m.id === id ? { ...m, rating } : m));
     await supabase.from('movies').update({ rating }).eq('id', id);
@@ -2075,7 +2108,8 @@ useEffect(() => {
         <div key="library" className="view-enter">
           <LibraryPage movies={movies} onToggle={toggleStatus} onRate={rateMovie} onDelete={deleteMovie}
             onLogout={() => supabase.auth.signOut()} onOpenSeed={() => setShowSeed(true)}
-            user={user} onOpenDrawer={() => setDrawerOpen(true)} onEpisodeUpdate={updateEpisodes} />
+            user={user} onOpenDrawer={() => setDrawerOpen(true)} onEpisodeUpdate={updateEpisodes}
+            onSetStatus={setMovieStatus} />
         </div>
       )}
       {view === 'stats' && (

@@ -333,9 +333,27 @@ function MovieDetailSheet({ title, onClose, myList = [] }) {
               <div className="h-20 bg-white/5 rounded-xl animate-pulse mt-4" />
             </div>
           ) : !movie ? (
-            <div className="py-10 text-center">
+            <div className="py-8 text-center">
               <p className="text-gray-500 text-sm">Couldn't find details for <span className="text-yellow-400 font-bold">"{title}"</span></p>
-              <p className="text-gray-700 text-xs mt-1">You can still add it manually from your library.</p>
+              <p className="text-gray-600 text-xs mt-1 mb-5">Not in TMDB — save it directly to your library.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    const { error } = await supabase.from('movies').insert({ title, status: 'watchlist', watched: false });
+                    if (!error) onClose();
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border font-black text-sm bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20 transition-all active:scale-[0.98]">
+                  <Bookmark size={14} fill="none" /> Watchlist
+                </button>
+                <button
+                  onClick={async () => {
+                    const { error } = await supabase.from('movies').insert({ title, status: 'watched', watched: true });
+                    if (!error) onClose();
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border font-black text-sm bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20 transition-all active:scale-[0.98]">
+                  <Eye size={14} /> Watched
+                </button>
+              </div>
             </div>
           ) : (
             <>
@@ -451,6 +469,21 @@ function randomWelcome() {
   return WELCOME_MESSAGES[Math.floor(Math.random() * WELCOME_MESSAGES.length)];
 }
 
+function buildWelcomeText(name?: string | null): string {
+  const hour = new Date().getHours();
+  const timeStr = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  if (name) {
+    const vibes = [
+      `${timeStr}, ${name}. FlickScient online — tell me what you're in the mood for and I'll find exactly the right film. 🎬`,
+      `${timeStr}, ${name}. Back again? Good taste recognized. What are we watching? 🎥`,
+      `${timeStr}, ${name}. FlickScient here — ready when you are. Drop a vibe, mood, or genre. 🍿`,
+      `${timeStr}, ${name}. No mid picks, no generic recs. Tell me what you need. 🔥`,
+    ];
+    return vibes[Math.floor(Math.random() * vibes.length)];
+  }
+  return randomWelcome();
+}
+
 const WELCOME_MSG = {
   id: 'welcome', sender: 'ai',
   text: randomWelcome(),
@@ -470,6 +503,7 @@ export default function FlickScient({ myList }) {
   const textareaRef      = useRef(null);
   const currentUserIdRef = useRef(null);
   const countdownRef     = useRef(null);
+  const nicknameRef      = useRef(null);
 
   useEffect(() => { chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
 
@@ -481,6 +515,30 @@ export default function FlickScient({ myList }) {
       currentUserIdRef.current = session.user.id;
       const loaded = await loadSupabaseSessions(session.user.id);
       setSessions(loaded);
+    })();
+  }, []);
+
+  // Fetch nickname and personalize greeting
+  useEffect(() => {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+      const hashed = await hashUserId(session.user.id);
+      const { data } = await supabase
+        .from('flickscient_users')
+        .select('user_memory')
+        .eq('user_id', hashed)
+        .single();
+      const name = data?.user_memory?.name;
+      if (name) {
+        nicknameRef.current = name;
+        setMessages(prev => {
+          if (prev.length === 1 && prev[0].id === 'welcome') {
+            return [{ id: 'welcome', sender: 'ai', text: buildWelcomeText(name) }];
+          }
+          return prev;
+        });
+      }
     })();
   }, []);
 
@@ -586,7 +644,7 @@ export default function FlickScient({ myList }) {
 
   const startNewChat = () => {
     setSessionId(crypto.randomUUID());
-    setMessages([{ id: 'welcome', sender: 'ai', text: randomWelcome() }]);
+    setMessages([{ id: 'welcome', sender: 'ai', text: buildWelcomeText(nicknameRef.current) }]);
     setAiTab('chat');
     setInput('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
