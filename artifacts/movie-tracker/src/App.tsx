@@ -405,6 +405,38 @@ function DrawerMenu({ open, onClose, user, onLogout, onOpenSeed, lightMode, onTo
   );
 }
 
+// ─── Welcome Modal ────────────────────────────────────────────────────────────
+function WelcomeModal({ onDismiss, user }) {
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onDismiss} />
+      <div className="relative w-full max-w-sm bg-[#111116] rounded-3xl p-7 z-10 border border-white/10 shadow-2xl animate-slide-up">
+        <button onClick={onDismiss}
+          className="absolute top-4 right-4 w-8 h-8 bg-white/5 rounded-full flex items-center justify-center text-gray-500 hover:text-white transition-colors">
+          <X size={16} />
+        </button>
+        <div className="w-14 h-14 bg-yellow-500 rounded-2xl flex items-center justify-center mb-5 shadow-lg shadow-yellow-500/20">
+          <Film size={28} className="text-black" />
+        </div>
+        <h2 className="text-2xl font-black text-white mb-2">Welcome to<br />MovieSync</h2>
+        <p className="text-sm text-gray-400 leading-relaxed mb-2">
+          Your personal masterpiece tracker. Build your library, track episodes, and rate everything you watch.
+        </p>
+        <p className="text-sm text-gray-500 leading-relaxed mb-6">
+          Try the <span className="text-purple-400 font-bold">AI</span> tab for <span className="text-purple-400 font-bold">FlickScient</span> — your film intelligence powered by Groq.
+        </p>
+        <button onClick={onDismiss}
+          className="w-full py-3.5 bg-yellow-500 text-black font-black rounded-2xl text-sm hover:bg-yellow-400 transition-all active:scale-95 shadow-lg shadow-yellow-500/20">
+          Start Exploring
+        </button>
+        {user?.email && (
+          <p className="text-center text-[11px] text-gray-700 mt-3">{user.email}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DrawerItem({ icon, label, sub, onClick }) {
   return (
     <button onClick={onClick}
@@ -423,13 +455,38 @@ function MovieDetailModal({ movie, onClose, onToggle, onRate, onDelete, onEpisod
   const [details,  setDetails]  = useState(null);
   const [cast,     setCast]     = useState([]);
   const [loading,  setLoading]  = useState(true);
-  const [epInput,  setEpInput]  = useState(movie.episodes_watched || 0);
+  const [epInput,     setEpInput]    = useState(movie.episodes_watched || 0);
+  const [posterColor, setPosterColor] = useState(null);
 
   useEffect(() => {
     fetchDetails();
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
   }, []);
+
+  useEffect(() => {
+    const src = movie.poster;
+    if (!src) return;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = 40; c.height = 60;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0, 40, 60);
+        const d = ctx.getImageData(0, 0, 40, 60).data;
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          const br = (d[i] + d[i + 1] + d[i + 2]) / 3;
+          if (br > 25 && br < 230) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
+        }
+        if (n > 0) setPosterColor(`${Math.round(r / n)},${Math.round(g / n)},${Math.round(b / n)}`);
+      } catch (_) {}
+    };
+    img.onerror = () => {};
+    img.src = src;
+  }, [movie.poster]);
 
   const fetchDetails = async () => {
     setLoading(true);
@@ -487,6 +544,10 @@ function MovieDetailModal({ movie, onClose, onToggle, onRate, onDelete, onEpisod
     <div className="fixed inset-0 z-[80] flex items-end" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-h-[92vh] bg-[#111116] rounded-t-3xl overflow-y-auto z-10 animate-slide-up">
+        {posterColor && (
+          <div className="absolute inset-0 rounded-t-3xl pointer-events-none transition-opacity duration-700"
+            style={{ background: `radial-gradient(ellipse at top, rgba(${posterColor},0.13) 0%, transparent 60%)`, zIndex: 0 }} />
+        )}
         {/* Backdrop */}
         {(details?.backdrop_path || movie.poster) && (
           <div className="relative w-full h-52 flex-shrink-0">
@@ -1894,6 +1955,7 @@ export default function App() {
   const [showSeed,    setShowSeed]   = useState(false);
   const [drawerOpen,  setDrawerOpen] = useState(false);
   const [lightMode,   setLightMode]  = useState(() => localStorage.getItem('lm') === 'true');
+  const [showWelcome, setShowWelcome] = useState(false);
 
   useEffect(() => {
     document.documentElement.classList.toggle('light', lightMode);
@@ -1939,6 +2001,12 @@ useEffect(() => {
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
+  useEffect(() => {
+    if (user && !localStorage.getItem('moviesync_welcomed')) {
+      setShowWelcome(true);
+    }
+  }, [user]);
+
   useEffect(() => { if (user) fetchMovies(); else setMovies([]); }, [user]);
 
   const fetchMovies = async () => {
@@ -1977,7 +2045,11 @@ useEffect(() => {
       ...movies.map(m => (m.title || '').toLowerCase() + ':lib'),
       ...movies.filter(m => m.status === 'watchlist').map(m => (m.title || '').toLowerCase() + ':wl'),
     ]);
-    return <SearchPage onBack={() => setView('library')} onAdded={fetchMovies} existingTitles={existingTitles} />;
+    return (
+      <div className="view-enter">
+        <SearchPage onBack={() => setView('library')} onAdded={fetchMovies} existingTitles={existingTitles} />
+      </div>
+    );
   }
 
   return (
@@ -1987,13 +2059,19 @@ useEffect(() => {
         lightMode={lightMode} onToggleLight={() => setLightMode(v => !v)} />
 
       {view === 'library' && (
-        <LibraryPage movies={movies} onToggle={toggleStatus} onRate={rateMovie} onDelete={deleteMovie}
-          onLogout={() => supabase.auth.signOut()} onOpenSeed={() => setShowSeed(true)}
-          user={user} onOpenDrawer={() => setDrawerOpen(true)} onEpisodeUpdate={updateEpisodes} />
+        <div key="library" className="view-enter">
+          <LibraryPage movies={movies} onToggle={toggleStatus} onRate={rateMovie} onDelete={deleteMovie}
+            onLogout={() => supabase.auth.signOut()} onOpenSeed={() => setShowSeed(true)}
+            user={user} onOpenDrawer={() => setDrawerOpen(true)} onEpisodeUpdate={updateEpisodes} />
+        </div>
       )}
-      {view === 'stats' && <StatsPage movies={movies} />}
+      {view === 'stats' && (
+        <div key="stats" className="view-enter">
+          <StatsPage movies={movies} />
+        </div>
+      )}
       {view === 'flickscient' && (
-        <div className="min-h-screen bg-[#0a0a0c] pt-0 pb-20">
+        <div key="flickscient" className="view-enter min-h-screen bg-[#0a0a0c] pt-0 pb-20">
           <div className="pt-10 pb-0 px-5 bg-[#0f0f13] border-b border-white/5">
             <p className="text-[9px] uppercase tracking-[0.35em] text-gray-500">The Ultimate Canon</p>
             <h1 className="text-2xl font-black mt-0.5 text-purple-400">FlickScient</h1>
@@ -2006,6 +2084,15 @@ useEffect(() => {
       <BottomNav view={view} setView={setView} />
 
       {showSeed && <SeedModal userId={user.id} onClose={() => setShowSeed(false)} onDone={fetchMovies} />}
+      {showWelcome && (
+        <WelcomeModal
+          user={user}
+          onDismiss={() => {
+            localStorage.setItem('moviesync_welcomed', '1');
+            setShowWelcome(false);
+          }}
+        />
+      )}
     </>
   );
 }
