@@ -131,7 +131,7 @@ function LoginScreen() {
     setMsg({ text: '', ok: false });
     const { error } = mode === 'login'
       ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: 'https://moviesyncfs.vercel.app' } });
+      : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
     if (error) setMsg({ text: error.message, ok: false });
     else if (mode === 'signup') setMsg({ text: 'Check your email to confirm your account ✓', ok: true });
     setLoading(false);
@@ -142,7 +142,7 @@ function LoginScreen() {
     setLoading(true);
     setMsg({ text: '', ok: false });
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: 'https://moviesyncfs.vercel.app',
+      redirectTo: window.location.origin,
     });
     if (error) setMsg({ text: error.message, ok: false });
     else setMsg({ text: 'Reset link sent — check your email ✓', ok: true });
