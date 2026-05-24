@@ -153,7 +153,7 @@ function LoginScreen() {
     setLoading(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin + '/?login=google' },
+      options: { redirectTo: window.location.origin },
     });
     if (error) { setMsg({ text: error.message, ok: false }); setLoading(false); }
   };

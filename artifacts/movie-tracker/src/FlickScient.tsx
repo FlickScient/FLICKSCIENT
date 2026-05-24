@@ -552,8 +552,10 @@ export default function FlickScient({ myList }) {
       }
       setIsStreaming(false);
     } catch (error) {
-      let errMsg = "Something broke on my end — try again in a sec. 🛠️";
-      if (error?.message) errMsg = error.message;
+      let errMsg = "Connection dropped — try again in a sec 🎬";
+      if (error?.message && !error.message.toLowerCase().includes('failed to fetch')) {
+        errMsg = error.message;
+      }
       setLoading(false);
       setIsStreaming(false);
       setMessages(prev => [...prev, { id: 'err-' + Date.now(), sender: 'ai', text: errMsg }]);
