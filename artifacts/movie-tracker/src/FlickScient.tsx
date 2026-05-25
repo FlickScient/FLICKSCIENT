@@ -862,6 +862,7 @@ export default function FlickScient({ myList }) {
             ? <p className="text-[9px] text-amber-500 font-bold text-center mt-1.5">Try again in {countdown}s…</p>
             : <p className="text-[9px] text-gray-700 text-center mt-1.5">Enter to send · Shift+Enter for new line</p>
           }
+          <p className="text-[9px] text-gray-700/60 text-center mt-1">FlickScient can make mistakes — verify important info</p>
         </div>
       </>}
 
