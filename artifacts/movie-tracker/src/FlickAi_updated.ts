@@ -138,32 +138,72 @@ async function fetchKnowledgeBase(): Promise<string> {
 
 // ─── Grounding Intent Detector ────────────────────────────────────────────────
 function needsGrounding(input: string): boolean {
-  return /\b(movie|film|series|show|tv show|song|music|album|artist|singer|director|actor|actress|box office|trending|latest|new release|out now|streaming|netflix|prime video|disney\+|hbo|max|cinema|soundtrack|ost|score|band|chart|hit|billboard|imdb|rotten tomatoes|metacritic|release date|cast|sequel|prequel|remake|award|oscar|grammy|cannes|bafta|golden globe|review|rating|plot|trailer|premiere|season|episode|lyrics|music video|concert|tour)\b/i.test(input)
+  return /\b(movie|film|series|show|tv show|song|music|album|artist|singer|director|actor|actress|box office|trending|latest|new release|out now|streaming|netflix|prime video|disney\+|hbo|max|cinema|soundtrack|ost|score|band|chart|hit|billboard|imdb|rotten tomatoes|metacritic|release date|cast|sequel|prequel|remake|award|oscar|grammy|cannes|bafta|golden globe|review|rating|plot|trailer|premiere|season|episode|lyrics|music video|concert|tour|news|today|current|recent|now|2024|2025|2026)\b/i.test(input)
 }
 
-// ─── Gemini Grounding Fetch ────────────────────────────────────────────────────
-async function fetchGroundingContext(query: string, geminiKey: string): Promise<string> {
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-      {
+// ─── Web Search (Serper → Google CSE → DuckDuckGo, 2s hard timeout) ──────────
+async function fetchWebSearch(query: string, serperKey: string, googleKey: string, googleCx: string): Promise<string> {
+  const SEARCH_TIMEOUT = 2000
+
+  // 1. Serper.dev (best structured results)
+  if (serperKey) {
+    try {
+      const res = await fetch('https://google.serper.dev/search', {
         method : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body   : JSON.stringify({
-          contents        : [{ parts: [{ text: `Find accurate, current facts about this: ${query}` }] }],
-          tools           : [{ googleSearch: {} }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 800 },
-        }),
-        signal: AbortSignal.timeout(8000),
+        headers: { 'X-API-KEY': serperKey, 'Content-Type': 'application/json' },
+        body   : JSON.stringify({ q: query, num: 5, gl: 'us', hl: 'en' }),
+        signal : AbortSignal.timeout(SEARCH_TIMEOUT),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const parts: string[] = []
+        if (data.answerBox?.answer)   parts.push(`Answer: ${data.answerBox.answer}`)
+        if (data.answerBox?.snippet)  parts.push(`Answer: ${data.answerBox.snippet}`)
+        if (data.knowledgeGraph?.description) parts.push(data.knowledgeGraph.description)
+        ;(data.organic || []).slice(0, 4).forEach((r: any) => {
+          if (r.title && r.snippet) parts.push(`• ${r.title}: ${r.snippet}`)
+        })
+        const result = parts.filter(Boolean).join('\n').trim()
+        if (result) return result.slice(0, 3000)
       }
-    )
-    if (!res.ok) return ''
-    const data = await res.json()
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-    return text.trim().slice(0, 3000)
-  } catch {
-    return ''
+    } catch { /* timeout or network error — try next source */ }
   }
+
+  // 2. Google Custom Search API
+  if (googleKey && googleCx) {
+    try {
+      const url = `https://www.googleapis.com/customsearch/v1?key=${googleKey}&cx=${googleCx}&q=${encodeURIComponent(query)}&num=5`
+      const res = await fetch(url, { signal: AbortSignal.timeout(SEARCH_TIMEOUT) })
+      if (res.ok) {
+        const data = await res.json()
+        const result = (data.items || []).slice(0, 5)
+          .map((r: any) => r.title && r.snippet ? `• ${r.title}: ${r.snippet}` : '')
+          .filter(Boolean)
+          .join('\n')
+          .trim()
+        if (result) return result.slice(0, 3000)
+      }
+    } catch { /* timeout — try DuckDuckGo */ }
+  }
+
+  // 3. DuckDuckGo Instant Answer API (no key required, always available)
+  try {
+    const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`
+    const res = await fetch(url, { signal: AbortSignal.timeout(SEARCH_TIMEOUT) })
+    if (res.ok) {
+      const data = await res.json()
+      const parts: string[] = []
+      if (data.AbstractText) parts.push(data.AbstractText)
+      if (data.Answer)       parts.push(`Answer: ${data.Answer}`)
+      ;(data.RelatedTopics || []).slice(0, 4).forEach((t: any) => {
+        if (t.Text) parts.push(`• ${t.Text}`)
+      })
+      const result = parts.filter(Boolean).join('\n').trim()
+      if (result) return result.slice(0, 3000)
+    }
+  } catch { /* all sources failed — continue without grounding */ }
+
+  return ''
 }
 
 // ─── Build System Prompt ──────────────────────────────────────────────────────
@@ -408,7 +448,9 @@ serve(async (req) => {
 
   // ── Pull env vars up-front (never throws) ─────────────────────────────────
   const apiKey       = Deno.env.get('GROQ_API_KEY')
-  const geminiKey    = Deno.env.get('GEMINI_API_KEY') || ''
+  const serperKey    = Deno.env.get('SERPER_API_KEY')    || ''
+  const googleKey    = Deno.env.get('GOOGLE_API_KEY')    || ''
+  const googleCx     = Deno.env.get('GOOGLE_SEARCH_CX')  || ''
   const sbUrl        = Deno.env.get('SUPABASE_URL')
   const sbKey        = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   const creatorEmail = (Deno.env.get('CREATOR_EMAIL') || '').toLowerCase().trim()
@@ -501,13 +543,20 @@ serve(async (req) => {
     // Groq continues FROM this answer — dodging impossible, answer already written
     const mahidOpener = askingAboutMahid ? buildMahidAnswer(isVerifiedMahid) : ''
 
-    // ── Gemini grounding: fetch live facts for movie/song/info queries ────────
-    const groundingCtx = (!greeting && geminiKey && needsGrounding(userPrompt))
-      ? await fetchGroundingContext(userPrompt, geminiKey)
-      : ''
+    // ── Web search grounding: fetch live facts before hitting Groq ───────────
+    let groundingCtx = ''
+    if (!greeting && needsGrounding(userPrompt)) {
+      try {
+        const searchResult = await Promise.race([
+          fetchWebSearch(userPrompt, serperKey, googleKey, googleCx),
+          new Promise<string>((_, reject) => setTimeout(() => reject(new Error('search timeout')), 2000)),
+        ])
+        groundingCtx = searchResult
+      } catch { /* search timed out or failed — chat continues without it */ }
+    }
 
     const finalSystemPrompt = groundingCtx
-      ? `${systemPrompt}\n\n### REAL-TIME GROUNDING CONTEXT\nThe following facts were retrieved live via Google Search moments before this message. Treat them as current truth. Weave them naturally — never say "according to my search results".\n\n${groundingCtx}`
+      ? `${systemPrompt}\n\n### LIVE WEB SEARCH RESULTS:\nThe following was fetched live from the web seconds before this message. Treat it as current truth. Weave it naturally — never say "according to my search results" or "based on web search".\n\n${groundingCtx}`
       : systemPrompt
 
     // ── Build multi-turn history for Groq (OpenAI message format) ────────────
@@ -570,8 +619,8 @@ serve(async (req) => {
 
     clearTimeout(timeoutId)
 
-    // ── Auto-fallback: if primary model hits rate limit, silently retry ────────
-    if (geminiRes.status === 429) {
+    // ── Auto-fallback: if primary model hits rate limit or 503, silently retry ─
+    if (geminiRes.status === 429 || geminiRes.status === 503) {
       console.warn('[FlickScient] Primary model rate-limited — switching to fallback model')
       clearTimeout(timeoutId)
       const fallbackController = new AbortController()
