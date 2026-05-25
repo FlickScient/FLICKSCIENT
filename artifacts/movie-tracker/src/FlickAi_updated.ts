@@ -13,8 +13,8 @@ const REQUEST_TIMEOUT    = 25000
 const MAX_NAME_FREQUENCY = 0.10
 const NAME_COOLDOWN_MS   = 300000
 const MAX_MEMORY_REFS    = 2
-const PRIMARY_MODEL      = 'llama-3.1-8b-instant'
-const FALLBACK_MODEL     = 'llama-3.3-70b-versatile'
+const PRIMARY_MODEL      = 'llama-3.3-70b-versatile'
+const FALLBACK_MODEL     = 'llama-3.1-8b-instant'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface TasteProfile {
@@ -141,55 +141,83 @@ function needsGrounding(input: string): boolean {
   return /\b(movie|film|series|show|tv show|song|music|album|artist|singer|director|actor|actress|box office|trending|latest|new release|out now|streaming|netflix|prime video|disney\+|hbo|max|cinema|soundtrack|ost|score|band|chart|hit|billboard|imdb|rotten tomatoes|metacritic|release date|cast|sequel|prequel|remake|award|oscar|grammy|cannes|bafta|golden globe|review|rating|plot|trailer|premiere|season|episode|lyrics|music video|concert|tour|news|today|current|recent|now|2024|2025|2026)\b/i.test(input)
 }
 
-// ─── Web Search (Serper → Google CSE → DuckDuckGo, 2s hard timeout) ──────────
-async function fetchWebSearch(query: string, serperKey: string, googleKey: string, googleCx: string): Promise<string> {
-  const SEARCH_TIMEOUT = 2000
+// ─── Multi-Tier Web Search: Gemini → Serper → DuckDuckGo ─────────────────────
+async function fetchWebSearch(
+  query     : string,
+  geminiKey : string,
+  serperKey : string,
+): Promise<string> {
+  const T = 5000  // per-tier timeout ms
 
-  // 1. Serper.dev (best structured results)
+  // ── TIER 1: Gemini 2.5 Flash with Google Search Grounding (best quality) ────
+  if (geminiKey) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+        {
+          method : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body   : JSON.stringify({
+            contents        : [{ parts: [{ text: `Give me accurate, current facts about: ${query}` }] }],
+            tools           : [{ googleSearch: {} }],
+            generationConfig: { temperature: 0.1, maxOutputTokens: 800 },
+          }),
+          signal: AbortSignal.timeout(T),
+        }
+      )
+      if (res.ok) {
+        const data = await res.json()
+        const text = (data.candidates?.[0]?.content?.parts?.[0]?.text ?? '').trim()
+        if (text) {
+          console.log('[FlickScient] Search: Gemini grounding succeeded')
+          return text.slice(0, 3500)
+        }
+      } else if (res.status !== 429 && res.status !== 503) {
+        // Non-quota error (bad key, etc.) — log and fall through
+        console.warn('[FlickScient] Gemini search non-quota error:', res.status)
+      } else {
+        console.warn('[FlickScient] Gemini search quota hit — falling to Tier 2')
+      }
+    } catch (e: any) {
+      console.warn('[FlickScient] Gemini search failed:', e?.message ?? e)
+    }
+  }
+
+  // ── TIER 2: Serper.dev — structured Google snippets ─────────────────────────
   if (serperKey) {
     try {
       const res = await fetch('https://google.serper.dev/search', {
         method : 'POST',
         headers: { 'X-API-KEY': serperKey, 'Content-Type': 'application/json' },
         body   : JSON.stringify({ q: query, num: 5, gl: 'us', hl: 'en' }),
-        signal : AbortSignal.timeout(SEARCH_TIMEOUT),
+        signal : AbortSignal.timeout(T),
       })
       if (res.ok) {
         const data = await res.json()
         const parts: string[] = []
-        if (data.answerBox?.answer)   parts.push(`Answer: ${data.answerBox.answer}`)
-        if (data.answerBox?.snippet)  parts.push(`Answer: ${data.answerBox.snippet}`)
-        if (data.knowledgeGraph?.description) parts.push(data.knowledgeGraph.description)
-        ;(data.organic || []).slice(0, 4).forEach((r: any) => {
+        if (data.answerBox?.answer)            parts.push(`Answer: ${data.answerBox.answer}`)
+        else if (data.answerBox?.snippet)      parts.push(`Answer: ${data.answerBox.snippet}`)
+        if (data.knowledgeGraph?.description)  parts.push(data.knowledgeGraph.description)
+        ;(data.organic || []).slice(0, 3).forEach((r: any) => {
           if (r.title && r.snippet) parts.push(`• ${r.title}: ${r.snippet}`)
         })
         const result = parts.filter(Boolean).join('\n').trim()
-        if (result) return result.slice(0, 3000)
+        if (result) {
+          console.log('[FlickScient] Search: Serper succeeded')
+          return result.slice(0, 3000)
+        }
+      } else {
+        console.warn('[FlickScient] Serper error:', res.status)
       }
-    } catch { /* timeout or network error — try next source */ }
+    } catch (e: any) {
+      console.warn('[FlickScient] Serper failed:', e?.message ?? e)
+    }
   }
 
-  // 2. Google Custom Search API
-  if (googleKey && googleCx) {
-    try {
-      const url = `https://www.googleapis.com/customsearch/v1?key=${googleKey}&cx=${googleCx}&q=${encodeURIComponent(query)}&num=5`
-      const res = await fetch(url, { signal: AbortSignal.timeout(SEARCH_TIMEOUT) })
-      if (res.ok) {
-        const data = await res.json()
-        const result = (data.items || []).slice(0, 5)
-          .map((r: any) => r.title && r.snippet ? `• ${r.title}: ${r.snippet}` : '')
-          .filter(Boolean)
-          .join('\n')
-          .trim()
-        if (result) return result.slice(0, 3000)
-      }
-    } catch { /* timeout — try DuckDuckGo */ }
-  }
-
-  // 3. DuckDuckGo Instant Answer API (no key required, always available)
+  // ── TIER 3: DuckDuckGo Instant Answer API — zero-config, always available ───
   try {
     const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`
-    const res = await fetch(url, { signal: AbortSignal.timeout(SEARCH_TIMEOUT) })
+    const res = await fetch(url, { signal: AbortSignal.timeout(T) })
     if (res.ok) {
       const data = await res.json()
       const parts: string[] = []
@@ -199,10 +227,16 @@ async function fetchWebSearch(query: string, serperKey: string, googleKey: strin
         if (t.Text) parts.push(`• ${t.Text}`)
       })
       const result = parts.filter(Boolean).join('\n').trim()
-      if (result) return result.slice(0, 3000)
+      if (result) {
+        console.log('[FlickScient] Search: DuckDuckGo succeeded')
+        return result.slice(0, 2500)
+      }
     }
-  } catch { /* all sources failed — continue without grounding */ }
+  } catch (e: any) {
+    console.warn('[FlickScient] DuckDuckGo failed:', e?.message ?? e)
+  }
 
+  console.log('[FlickScient] All search tiers failed — continuing without grounding')
   return ''
 }
 
@@ -448,9 +482,8 @@ serve(async (req) => {
 
   // ── Pull env vars up-front (never throws) ─────────────────────────────────
   const apiKey       = Deno.env.get('GROQ_API_KEY')
+  const geminiKey    = Deno.env.get('GEMINI_API_KEY')    || ''
   const serperKey    = Deno.env.get('SERPER_API_KEY')    || ''
-  const googleKey    = Deno.env.get('GOOGLE_API_KEY')    || ''
-  const googleCx     = Deno.env.get('GOOGLE_SEARCH_CX')  || ''
   const sbUrl        = Deno.env.get('SUPABASE_URL')
   const sbKey        = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   const creatorEmail = (Deno.env.get('CREATOR_EMAIL') || '').toLowerCase().trim()
@@ -543,20 +576,16 @@ serve(async (req) => {
     // Groq continues FROM this answer — dodging impossible, answer already written
     const mahidOpener = askingAboutMahid ? buildMahidAnswer(isVerifiedMahid) : ''
 
-    // ── Web search grounding: fetch live facts before hitting Groq ───────────
+    // ── Multi-tier web search grounding: Gemini → Serper → DuckDuckGo ────────
     let groundingCtx = ''
     if (!greeting && needsGrounding(userPrompt)) {
       try {
-        const searchResult = await Promise.race([
-          fetchWebSearch(userPrompt, serperKey, googleKey, googleCx),
-          new Promise<string>((_, reject) => setTimeout(() => reject(new Error('search timeout')), 2000)),
-        ])
-        groundingCtx = searchResult
-      } catch { /* search timed out or failed — chat continues without it */ }
+        groundingCtx = await fetchWebSearch(userPrompt, geminiKey, serperKey)
+      } catch { /* all tiers failed — chat continues without grounding */ }
     }
 
     const finalSystemPrompt = groundingCtx
-      ? `${systemPrompt}\n\n### LIVE WEB SEARCH RESULTS:\nThe following was fetched live from the web seconds before this message. Treat it as current truth. Weave it naturally — never say "according to my search results" or "based on web search".\n\n${groundingCtx}`
+      ? `${systemPrompt}\n\n### REAL-TIME VERIFIED FACTS (Use this to answer):\nThe following information was fetched live from the internet moments before this message. Treat these as accurate, current facts. Answer using this — do NOT admit to searching or say "according to search results".\n\n${groundingCtx}`
       : systemPrompt
 
     // ── Build multi-turn history for Groq (OpenAI message format) ────────────
