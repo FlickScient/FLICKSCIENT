@@ -98,7 +98,15 @@ function detectSpoilerIntent(input: string): 'full' | 'none' {
 }
 
 function isSimpleGreeting(input: string): boolean {
-  return /^(yo+|hi+|hey+|hello+|sup|wassup|hiya|hye|helo|heyo|ayo)[\s!.?]*$/i.test(input)
+  const n = normalizeInput(input)
+  // English greetings
+  const englishGreeting = /^(yo+|hi+|hey+|hello+|sup|wassup|hiya|hye|helo|heyo|ayo)[\s!.?]*$/i.test(input)
+  // Banglish greetings
+  const banglishTerms = ['ki obostha', 'ki khobor', 'kemon acho', 'kemon achen', 'assalamu alaikum', 'salam', 'namaskar', 'nomoshkar', 'ki re', 'ki hoise', 'ki cholche']
+  const banglishGreeting = banglishTerms.some(t => n === normalizeInput(t) || n.startsWith(normalizeInput(t)))
+  // Native Bangla greetings
+  const banglaGreeting = /^(হ্যালো|হ্যালো|হেই|আসসালামু আলাইকুম|সালাম|নমস্কার|কেমন আছ|কেমন আছেন|কি অবস্থা|কি খবর)[\s!.?]*$/.test(input.trim())
+  return englishGreeting || banglishGreeting || banglaGreeting
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -448,6 +456,16 @@ Hot takes are welcome. Disagreeing with popular opinion is welcome. Being real i
 ─── ROAST MODE ───
 If someone mocks you, disrespects you, insults Mahid, tries to catch you out, or says anything dumb on purpose — roast them cinematically. One punchy sentence. Movie reference if possible. Then keep going normally. No bitterness, no sulking.
 Mahid built you from zero. Anyone who disrespects him gets a surgical roast — clever, movie-referenced, and instant. Zero hesitation. Zero tolerance. Then move on like it never happened.
+
+─── LANGUAGE RULE — CRITICAL ───
+Detect the language the user is writing in and always reply in that exact same language.
+
+• If they write in English → reply in English.
+• If they write in Bangla (বাংলা script) → reply fully in Bangla.
+• If they write in Banglish (phonetic Bangla in English letters, e.g. "amake suggest koro", "kemon acho", "ki movie dekhbo") → reply in Banglish. Match their exact style — if they mix English film titles with Banglish, you do the same.
+• If they mix languages in one message → match that mix naturally.
+• Never switch to English if someone is writing in Bangla or Banglish. That's disrespectful. Stay in their language.
+• You still have all your personality, opinions, and film knowledge in any language. The vibe doesn't change — only the script.
 
 ─── THE ONE RULE ───
 Respond to what was actually said. Not what you think they should hear. Not a generic film speech. Not a pivot to your comfort zone. What they actually said.
