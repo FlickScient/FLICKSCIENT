@@ -67,6 +67,18 @@ function sanitizeInput(input: string): string {
   return clean.slice(0, 500).trim()
 }
 
+// ─── Multilingual Input Normalizer ────────────────────────────────────────────
+// Safely normalizes English, Bangla (বাংলা), and Banglish inputs.
+// Strips special characters while preserving Unicode letters and numbers.
+function normalizeInput(input: string): string {
+  return (input || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 // ─── Intent detectors ─────────────────────────────────────────────────────────
 function claimsMahidIdentity(input: string): boolean {
   return /\b(i'?m|i am|this is|it'?s)\s+(mahid)\b/i.test(input)
@@ -137,8 +149,46 @@ async function fetchKnowledgeBase(): Promise<string> {
 }
 
 // ─── Grounding Intent Detector ────────────────────────────────────────────────
+// Supports English, Bangla (বাংলা), and Banglish phonetic inputs.
 function needsGrounding(input: string): boolean {
-  return /\b(movie|film|series|show|tv show|song|music|album|artist|singer|director|actor|actress|box office|trending|latest|new release|out now|streaming|netflix|prime video|disney\+|hbo|max|cinema|soundtrack|ost|score|band|chart|hit|billboard|imdb|rotten tomatoes|metacritic|release date|cast|sequel|prequel|remake|award|oscar|grammy|cannes|bafta|golden globe|review|rating|plot|trailer|premiere|season|episode|lyrics|music video|concert|tour|news|today|current|recent|now|2024|2025|2026)\b/i.test(input)
+  const n = normalizeInput(input)
+
+  // English terms
+  const english = [
+    'movie', 'film', 'series', 'show', 'tv show', 'song', 'music', 'album',
+    'artist', 'singer', 'director', 'actor', 'actress', 'box office', 'trending',
+    'latest', 'new release', 'out now', 'streaming', 'netflix', 'prime video',
+    'disney', 'hbo', 'max', 'cinema', 'soundtrack', 'ost', 'score', 'band',
+    'chart', 'hit', 'billboard', 'imdb', 'rotten tomatoes', 'metacritic',
+    'release date', 'cast', 'sequel', 'prequel', 'remake', 'award', 'oscar',
+    'grammy', 'cannes', 'bafta', 'golden globe', 'review', 'rating', 'plot',
+    'trailer', 'premiere', 'season', 'episode', 'lyrics', 'music video',
+    'concert', 'tour', 'news', 'today', 'current', 'recent', 'now',
+    '2024', '2025', '2026',
+  ]
+
+  // Banglish (phonetic Bangla written in English letters)
+  const banglish = [
+    'suggest', 'koro', 'dekhi', 'dekhbo', 'dekhte', 'chai', 'dao',
+    'gan', 'gaan', 'gayan', 'shono', 'shun', 'bolo', 'bol',
+    'khobor', 'ajker', 'notun', 'purano', 'valo', 'bhalo',
+    'movie', 'chobi', 'natok', 'cinema', 'natak',
+    'singer', 'shilpi', 'band', 'album', 'lyrics', 'lyric',
+    'artcell', 'nemesis', 'warfaze', 'aurthohin', 'lalon', 'chirkutt',
+    'arnob', 'shironamhin', 'miles', 'souls', 'feedback',
+  ]
+
+  // Native Bangla script terms
+  const bangla = [
+    'চলচ্চিত্র', 'সিনেমা', 'মুভি', 'ছবি', 'নাটক', 'সিরিজ',
+    'গান', 'সঙ্গীত', 'লিরিক্স', 'শিল্পী', 'গায়ক', 'গায়িকা',
+    'অ্যালবাম', 'ব্যান্ড', 'খবর', 'আজকের', 'নতুন', 'ট্রেন্ডিং',
+    'রিভিউ', 'রেটিং', 'পুরস্কার', 'অভিনেতা', 'অভিনেত্রী',
+    'পরিচালক', 'সাম্প্রতিক',
+  ]
+
+  const allTerms = [...english, ...banglish, ...bangla]
+  return allTerms.some(term => n.includes(normalizeInput(term)))
 }
 
 // ─── Multi-Tier Web Search: Gemini → Serper → DuckDuckGo ─────────────────────
@@ -592,7 +642,7 @@ serve(async (req) => {
     }
 
     const finalSystemPrompt = groundingCtx
-      ? `${systemPrompt}\n\n### REAL-TIME VERIFIED FACTS (Use this to answer):\nThe following information was fetched live from the internet moments before this message. Treat these as accurate, current facts. Answer using this — do NOT admit to searching or say "according to search results".\n\n${groundingCtx}`
+      ? `${systemPrompt}\n\n### REAL-TIME VERIFIED FACTS:\n${groundingCtx}\n\nCRITICAL INSTRUCTION: You must strictly answer using ONLY the verified facts provided above. If the search context is empty, does not mention the specific song/band requested, or fails to verify a fact, you must say: "I couldn't find verified live data for that right now." Never invent tracklists. Never mix up bands. Never guess from offline training memory. Never create facts that are not present in the search context.`
       : systemPrompt
 
     // ── Build multi-turn history for Groq (OpenAI message format) ────────────
