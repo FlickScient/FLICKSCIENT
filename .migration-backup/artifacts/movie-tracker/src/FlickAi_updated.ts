@@ -87,7 +87,7 @@ function claimsMahidIdentity(input: string): boolean {
   // Banglish: "ami mahid", "ami-i mahid", "amar naam mahid"
   const banglish = [
     'ami mahid', 'ami i mahid', 'amar naam mahid', 'amar name mahid',
-    'mahid ami', 'ami hলাm mahid',
+    'mahid ami', 'ami-i mahid',
   ].some(t => n.includes(normalizeInput(t)))
   // Bangla script
   const bangla = /আমি\s*মাহিদ|আমার\s*নাম\s*মাহিদ/.test(input)
