@@ -81,31 +81,74 @@ function normalizeInput(input: string): string {
 
 // ─── Intent detectors ─────────────────────────────────────────────────────────
 function claimsMahidIdentity(input: string): boolean {
-  return /\b(i'?m|i am|this is|it'?s)\s+(mahid)\b/i.test(input)
+  const n = normalizeInput(input)
+  // English: "I'm Mahid", "I am Mahid", "this is Mahid"
+  const english = /\b(i'?m|i am|this is|it'?s)\s+(mahid)\b/i.test(input)
+  // Banglish: "ami mahid", "ami-i mahid", "amar naam mahid"
+  const banglish = [
+    'ami mahid', 'ami i mahid', 'amar naam mahid', 'amar name mahid',
+    'mahid ami', 'ami hলাm mahid',
+  ].some(t => n.includes(normalizeInput(t)))
+  // Bangla script
+  const bangla = /আমি\s*মাহিদ|আমার\s*নাম\s*মাহিদ/.test(input)
+  return english || banglish || bangla
 }
 
 function mentionsMahid(input: string): boolean {
-  return /\b(mahid|who'?s mahid|who is mahid|who made you|who built you|your creator|who created you|tell me about mahid|about you and mahid|who are you|what are you|who made flickscient|who built flickscient|who built moviesync|who made moviesync)\b/i.test(input)
+  const n = normalizeInput(input)
+  // English patterns
+  const english = /\b(mahid|who'?s mahid|who is mahid|who made you|who built you|your creator|who created you|tell me about mahid|about you and mahid|who are you|what are you|who made flickscient|who built flickscient|who built moviesync|who made moviesync)\b/i.test(input)
+  // Banglish patterns — "tomake ke banaise", "ke banaice", "ke tomare banaise", "flickscient ke banaiche", "tor creator kon"
+  const banglishTerms = [
+    'mahid', 'tomake ke banaise', 'tomake ke banaiche', 'ke banaice', 'ke banaiche',
+    'ke banalo', 'ke tomare banaise', 'ke tomare banaiche', 'tomare ke banaise',
+    'flickscient ke banaiche', 'flickscient ke banaise', 'moviesync ke banaiche',
+    'tor creator', 'apnar creator', 'tomar creator', 'ke tumi', 'tumi ki',
+    'tumi kon', 'tumi ke', 'apni ke', 'tomar porichoy', 'tor porichoy',
+    'ke likheche', 'ke toiri koreche', 'ke toiri korecho', 'ke baniyeche',
+  ]
+  const banglish = banglishTerms.some(t => n.includes(normalizeInput(t)))
+  // Bangla script
+  const bangla = /মাহিদ|তোমাকে\s*কে\s*বানিয়েছে|কে\s*তোমাকে\s*বানিয়েছে|তোমার\s*স্রষ্টা|তুমি\s*কে|আপনি\s*কে|কে\s*তৈরি\s*করেছে/.test(input)
+  return english || banglish || bangla
 }
 
 function detectSpoilerIntent(input: string): 'full' | 'none' {
-  const keywords = [
+  const n = normalizeInput(input)
+  // English spoiler keywords
+  const english = [
     /spoil/i, /deep dive/i, /full breakdown/i, /what happens/i,
     /tell me everything/i, /the ending/i, /how does it end/i,
     /explain the plot/i, /full analysis/i, /ruin it/i,
   ]
-  return keywords.some(p => p.test(input)) ? 'full' : 'none'
+  if (english.some(p => p.test(input))) return 'full'
+  // Banglish spoiler keywords
+  const banglishSpoilers = [
+    'spoiler dao', 'shesh ta bolo', 'ending bolo', 'ki hoise sheshe',
+    'ki holo sheshe', 'poripurno golpo', 'sob bolo', 'details bolo',
+    'plot bolo', 'shob kichu bolo', 'full details', 'full golpo',
+    'sheshe ki hoi', 'ki hoise', 'ending ta ki',
+  ]
+  if (banglishSpoilers.some(t => n.includes(normalizeInput(t)))) return 'full'
+  // Bangla script spoiler keywords
+  const bangla = /শেষটা\s*বলো|এন্ডিং\s*বলো|সব\s*বলো|পুরো\s*গল্প|স্পয়লার/.test(input)
+  return bangla ? 'full' : 'none'
 }
 
 function isSimpleGreeting(input: string): boolean {
   const n = normalizeInput(input)
   // English greetings
   const englishGreeting = /^(yo+|hi+|hey+|hello+|sup|wassup|hiya|hye|helo|heyo|ayo)[\s!.?]*$/i.test(input)
-  // Banglish greetings
-  const banglishTerms = ['ki obostha', 'ki khobor', 'kemon acho', 'kemon achen', 'assalamu alaikum', 'salam', 'namaskar', 'nomoshkar', 'ki re', 'ki hoise', 'ki cholche']
+  // Banglish greetings — common short openers
+  const banglishTerms = [
+    'ki obostha', 'ki khobor', 'kemon acho', 'kemon achen', 'kemon achis',
+    'assalamu alaikum', 'walaikum assalam', 'salam', 'namaskar', 'nomoshkar',
+    'ki re', 'ki hoise', 'ki cholche', 'ki korcho', 'ki korchen',
+    'bhalo acho', 'thik acho', 'thik achen', 'kotha achen',
+  ]
   const banglishGreeting = banglishTerms.some(t => n === normalizeInput(t) || n.startsWith(normalizeInput(t)))
   // Native Bangla greetings
-  const banglaGreeting = /^(হ্যালো|হ্যালো|হেই|আসসালামু আলাইকুম|সালাম|নমস্কার|কেমন আছ|কেমন আছেন|কি অবস্থা|কি খবর)[\s!.?]*$/.test(input.trim())
+  const banglaGreeting = /^(হ্যালো|হেই|আসসালামু\s*আলাইকুম|ওয়ালাইকুম\s*আসসালাম|সালাম|নমস্কার|কেমন\s*আছ|কেমন\s*আছেন|কি\s*অবস্থা|কি\s*খবর|কি\s*করছ|কি\s*করছেন|ভালো\s*আছ|ঠিক\s*আছ)[\s!.?]*$/.test(input.trim())
   return englishGreeting || banglishGreeting || banglaGreeting
 }
 
