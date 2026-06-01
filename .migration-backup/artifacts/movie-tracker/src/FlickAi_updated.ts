@@ -9,7 +9,7 @@ const corsHeaders = {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const REQUEST_TIMEOUT    = 12000
+const REQUEST_TIMEOUT    = 25000
 const MAX_NAME_FREQUENCY = 0.10
 const NAME_COOLDOWN_MS   = 300000
 const MAX_MEMORY_REFS    = 2
@@ -248,7 +248,7 @@ async function fetchWebSearch(
   geminiKey : string,
   serperKey : string,
 ): Promise<string> {
-  const T = 2000  // per-tier timeout ms — kept short to stay within Supabase execution limits
+  const T = 3000  // per-tier timeout ms — kept short to stay within Supabase execution limits
 
   // ── TIER 1: Gemini 2.5 Flash with Google Search Grounding (best quality) ────
   if (geminiKey) {
