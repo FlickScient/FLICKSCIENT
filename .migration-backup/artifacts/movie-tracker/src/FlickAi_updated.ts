@@ -9,7 +9,7 @@ const corsHeaders = {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const REQUEST_TIMEOUT    = 25000
+const REQUEST_TIMEOUT    = 12000
 const MAX_NAME_FREQUENCY = 0.10
 const NAME_COOLDOWN_MS   = 300000
 const MAX_MEMORY_REFS    = 2
@@ -248,7 +248,7 @@ async function fetchWebSearch(
   geminiKey : string,
   serperKey : string,
 ): Promise<string> {
-  const T = 5000  // per-tier timeout ms
+  const T = 2000  // per-tier timeout ms — kept short to stay within Supabase execution limits
 
   // ── TIER 1: Gemini 2.5 Flash with Google Search Grounding (best quality) ────
   if (geminiKey) {
@@ -916,8 +916,15 @@ serve(async (req) => {
               } catch { /* skip malformed SSE chunk */ }
             }
           }
+        } catch (streamErr: any) {
+          // Send a graceful fallback instead of crashing the connection
+          const fallback = fullText
+            ? '' // partial text already sent — just close cleanly
+            : "Hold on, be right back 🎬"
+          if (fallback) ctrl.enqueue(encoder.encode(fallback))
+          console.error('[FlickScient] Stream error:', streamErr?.message ?? streamErr)
         } finally {
-          ctrl.close()
+          try { ctrl.close() } catch { /* already closed */ }
           if (hashedUserId && supabase && fullText) {
             const nextRefCount = Math.min((userMemory?.memory_reference_count || 0) + 1, MAX_MEMORY_REFS + 1)
             updateUserMemory(supabase, hashedUserId, userPrompt, fullText, userMemory || {}, apiKey, nextRefCount)
