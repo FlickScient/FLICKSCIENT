@@ -696,11 +696,13 @@ serve(async (req) => {
 
     // ── Multi-tier web search grounding: Gemini → Serper → DuckDuckGo ────────
     let groundingCtx = ''
-    if (!greeting && needsGrounding(userPrompt)) {
-      try {
-        groundingCtx = await fetchWebSearch(userPrompt, geminiKey, serperKey)
-      } catch { /* all tiers failed — chat continues without grounding */ }
-    }
+if (!greeting && needsGrounding(userPrompt)) {
+  try {
+    const groundingPromise = fetchWebSearch(userPrompt, geminiKey, serperKey)
+    const timeoutPromise = new Promise<string>(resolve => setTimeout(() => resolve(''), 3000))
+    groundingCtx = await Promise.race([groundingPromise, timeoutPromise])
+  } catch { }
+}
 
     const finalSystemPrompt = groundingCtx
       ? `${systemPrompt}\n\n### REAL-TIME VERIFIED FACTS:\n${groundingCtx}\n\nCRITICAL INSTRUCTION: You must strictly answer using ONLY the verified facts provided above. If the search context is empty, does not mention the specific song/band requested, or fails to verify a fact, you must say: "I couldn't find verified live data for that right now." Never invent tracklists. Never mix up bands. Never guess from offline training memory. Never create facts that are not present in the search context.`
