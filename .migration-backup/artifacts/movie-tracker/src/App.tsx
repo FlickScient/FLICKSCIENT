@@ -1049,17 +1049,35 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
             ))}
           </div>
 
-          {/* Cross-filter: genres */}
+          {/* Cross-filter: genres + industry */}
           {searchResults.length > 0 && (
-            <div className="mb-3">
-              <p className="text-[9px] uppercase tracking-widest text-gray-600 font-black mb-2">Filter by Genre</p>
-              <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-                {ALL_GENRES.slice(0,10).map(g => (
-                  <FilterChip key={g} active={activeGenres.includes(g)} onClick={() => toggleGenre(g)}>
-                    {GENRE_ICONS[g]} {g}
-                  </FilterChip>
-                ))}
+            <div className="mb-3 space-y-2">
+              <div>
+                <p className="text-[9px] uppercase tracking-widest text-gray-600 font-black mb-1.5">Genre</p>
+                <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+                  {ALL_GENRES.slice(0,12).map(g => (
+                    <FilterChip key={g} active={activeGenres.includes(g)} onClick={() => toggleGenre(g)}>
+                      {GENRE_ICONS[g]} {g}
+                    </FilterChip>
+                  ))}
+                </div>
               </div>
+              <div>
+                <p className="text-[9px] uppercase tracking-widest text-gray-600 font-black mb-1.5">Industry</p>
+                <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+                  {INDUSTRIES.map(ind => (
+                    <FilterChip key={ind.label} active={activeIndustries.includes(ind.label)} onClick={() => toggleInd(ind.label)}>
+                      {ind.flag} {ind.label}
+                    </FilterChip>
+                  ))}
+                </div>
+              </div>
+              {(activeGenres.length > 0 || activeIndustries.length > 0) && (
+                <button onClick={() => { setActiveGenres([]); setActiveIndustries([]); }}
+                  className="text-[9px] text-gray-600 hover:text-yellow-500 font-bold transition-colors">
+                  ✕ Clear filters
+                </button>
+              )}
             </div>
           )}
 
@@ -1067,9 +1085,11 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
           <div className="space-y-3">
             {searchResults
               .filter(item => {
-                if (activeGenres.length === 0) return true;
                 const itemGenres = (item.genre_ids||[]).map(id => TMDB_GENRES[id]).filter(Boolean);
-                return activeGenres.some(g => itemGenres.includes(g));
+                const itemIndustry = LANG_TO_INDUSTRY[item.original_language] || null;
+                if (activeGenres.length > 0 && !activeGenres.some(g => itemGenres.includes(g))) return false;
+                if (activeIndustries.length > 0 && !activeIndustries.includes(itemIndustry)) return false;
+                return true;
               })
               .map(item => (
                 <ResultCard key={item.id} item={item}

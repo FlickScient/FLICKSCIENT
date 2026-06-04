@@ -104,6 +104,12 @@ importers:
         specifier: 9.15.9
         version: 9.15.9
 
+  .local/share/pnpm/.tools/pnpm/9.15.9_tmp_961:
+    dependencies:
+      pnpm:
+        specifier: 9.15.9
+        version: 9.15.9
+
   artifacts/api-server:
     dependencies:
       '@workspace/api-zod':

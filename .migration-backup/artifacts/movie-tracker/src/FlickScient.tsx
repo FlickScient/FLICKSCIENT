@@ -471,8 +471,22 @@ function randomWelcome() {
 
 function buildWelcomeText(name?: string | null): string {
   const hour = new Date().getHours();
-  const timeStr = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const timeStr =
+    hour >= 0  && hour < 4  ? null          // moonlit — handled below
+    : hour < 12              ? 'Good morning'
+    : hour < 17              ? 'Good afternoon'
+    : hour < 21              ? 'Good evening'
+    :                          'Good night';
+
   if (name) {
+    if (hour >= 0 && hour < 4) {
+      const moonlit = [
+        `Moonlit ${name}. Not sleeping either? Good — the best films hit different at this hour. What are we watching? 🌙`,
+        `Moonlit ${name}. 4am cinema mode activated. I know exactly what this hour calls for. 🎬`,
+        `Moonlit ${name}. The rest of the world is asleep. Let's find something that deserves the silence. 🌑`,
+      ];
+      return moonlit[Math.floor(Math.random() * moonlit.length)];
+    }
     const vibes = [
       `${timeStr}, ${name}. FlickScient online — tell me what you're in the mood for and I'll find exactly the right film. 🎬`,
       `${timeStr}, ${name}. Back again? Good taste recognized. What are we watching? 🎥`,
@@ -495,6 +509,7 @@ export default function FlickScient({ myList }) {
   const [loading,        setLoading]        = useState(false);
   const [isStreaming,    setIsStreaming]     = useState(false);
   const [aiTab,          setAiTab]          = useState('chat');
+  const [toast,          setToast]          = useState('');
   const [sessionId,      setSessionId]      = useState(() => crypto.randomUUID());
   const [sessions,       setSessions]       = useState([]);
   const [selectedMovie,  setSelectedMovie]  = useState(null);
@@ -589,7 +604,16 @@ export default function FlickScient({ myList }) {
             'Authorization': `Bearer ${authToken}`,
             'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
           },
-          body: JSON.stringify({ prompt: userQuery, userId, sessionId, conversationHistory, watched: watchedTitles || '', watchlist: watchlistTitles || '' }),
+          body: JSON.stringify({
+            prompt: userQuery,
+            userId,
+            sessionId,
+            conversationHistory,
+            watched: watchedTitles || '',
+            watchlist: watchlistTitles || '',
+            userLocalHour: new Date().getHours(),
+            userTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          }),
         }
       );
       if (!response.ok) {
@@ -620,6 +644,36 @@ export default function FlickScient({ myList }) {
         fullText += chunk;
         setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: fullText } : m));
       }
+
+      // ── Parse AI action tags ───────────────────────────────────────────────
+      const actionMatch = fullText.match(/<action>([\s\S]*?)<\/action>/);
+      if (actionMatch) {
+        try {
+          const actionData = JSON.parse(actionMatch[1].trim());
+          const cleanText = fullText.replace(/<action>[\s\S]*?<\/action>/, '').trim();
+          setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: cleanText } : m));
+
+          const isWatched = actionData.type === 'add_watched';
+          const actionTitle = actionData.title || '';
+          if (actionTitle && (actionData.type === 'add_watchlist' || actionData.type === 'add_watched')) {
+            const { data: { session: authSess } } = await supabase.auth.getSession();
+            if (authSess?.user) {
+              await supabase.from('movies').insert({
+                user_id: authSess.user.id,
+                title: actionTitle,
+                status: isWatched ? 'watched' : 'watchlist',
+                watched: isWatched,
+              });
+            }
+            const toastMsg = isWatched
+              ? `✓ Marked "${actionTitle}" as watched`
+              : `✓ Added "${actionTitle}" to watchlist`;
+            setToast(toastMsg);
+            setTimeout(() => setToast(''), 3500);
+          }
+        } catch {}
+      }
+
       setIsStreaming(false);
     } catch (error) {
       let errMsg = "Connection dropped — try again in a sec 🎬";
@@ -869,6 +923,20 @@ export default function FlickScient({ myList }) {
       {selectedMovie && (
         <MovieDetailSheet title={selectedMovie} onClose={() => setSelectedMovie(null)} myList={myList} />
       )}
+
+      {/* ── AI Action Toast ── */}
+      {toast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] pointer-events-none"
+          style={{ animation: 'fadeInUp 0.25s ease' }}>
+          <div className="bg-[#1a1a24] border border-white/10 text-white text-[12px] font-bold px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 whitespace-nowrap">
+            <span className="text-green-400">{toast}</span>
+          </div>
+        </div>
+      )}
+      <style>{`
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes fadeInUp { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+      `}</style>
     </div>
   );
 }
