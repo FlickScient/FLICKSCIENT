@@ -495,12 +495,37 @@ function buildWelcomeText(name?: string | null): string {
     ];
     return vibes[Math.floor(Math.random() * vibes.length)];
   }
-  return randomWelcome();
+  // No name — still show time-based greeting
+  const timeVibes: Record<string, string[]> = {
+    morning: [
+      "Good morning. FlickScient online — tell me what you're in the mood for and I'll find exactly the right film. 🎬",
+      "Good morning. Back with the film energy already? Good taste. Drop a vibe, mood, or genre. ☕🎥",
+    ],
+    afternoon: [
+      "Good afternoon. FlickScient here — no mid picks, no generic recs. What do you actually want to watch? 🍿",
+      "Good afternoon. Cinema IQ: maximum. Tell me the exact vibe right now. 🎭",
+    ],
+    evening: [
+      "Good evening. The best time for a great film — what are we watching tonight? 🔥",
+      "Good evening. Tell me what you need and I'll find the film that actually fits. 🎬",
+    ],
+    night: [
+      "Good night owl. Still going? Tell me your mood and I'll find something worth staying up for. 🌙",
+      "Good night. Late-night cinema mode: the best films hit different now. What are we watching? 🎥",
+    ],
+    moonlit: [
+      "Can't sleep? Neither can I. Perfect — the best films live at this hour. What are we watching? 🌑",
+      "4am cinema mode. I know exactly what this hour calls for. Tell me your mood. 🌙",
+    ],
+  };
+  const bucket = hour < 4 ? 'moonlit' : hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : hour < 21 ? 'evening' : 'night';
+  const pool = timeVibes[bucket];
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 const WELCOME_MSG = {
   id: 'welcome', sender: 'ai',
-  text: randomWelcome(),
+  text: buildWelcomeText(null),
 };
 
 export default function FlickScient({ myList }) {
@@ -642,11 +667,16 @@ export default function FlickScient({ myList }) {
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
         fullText += chunk;
-        setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: fullText } : m));
+        // Strip <action> tags from display in real-time (including partial tags mid-stream)
+        const displayText = fullText
+          .replace(/<action>[\s\S]*?<\/action>/g, '')
+          .replace(/<action>[\s\S]*$/, '')
+          .trim();
+        setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: displayText } : m));
       }
 
       // ── Parse AI action tags ───────────────────────────────────────────────
-      const actionMatch = fullText.match(/<action>([\s\S]*?)<\/action>/);
+      const actionMatch = fullText.match(/<action>([\s\S]*?)<\/action>/i);
       if (actionMatch) {
         try {
           const actionData = JSON.parse(actionMatch[1].trim());
@@ -843,15 +873,37 @@ export default function FlickScient({ myList }) {
                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-xs border shadow-lg ${msg.sender==='user' ? 'bg-purple-500 border-purple-400 text-white font-black' : 'bg-[#16161d] border-purple-500/30 text-purple-400'}`}>
                   {msg.sender==='user' ? <User size={15} /> : <Sparkles size={15} />}
                 </div>
-                <div className={`flex-1 p-4 rounded-2xl text-[13px] leading-relaxed border whitespace-pre-wrap select-text ${msg.sender==='user' ? 'bg-[#1a1a24] text-gray-100 border-white/5 font-medium rounded-tr-none ml-6' : 'bg-gradient-to-b from-[#121218] to-[#0f0f14] text-gray-200 border-white/5 rounded-tl-none mr-6 shadow-md'}`}>
-                  {msg.text.split(/(\*\*[^*]+\*\*)/).map((part, i) =>
-                    part.startsWith('**') && part.endsWith('**')
-                      ? <button key={i} onClick={() => setSelectedMovie(part.slice(2,-2))}
-                          className="text-yellow-400 font-black hover:text-yellow-300 hover:underline underline-offset-2 transition-colors cursor-pointer">
-                          {part.slice(2,-2)}
-                        </button>
-                      : part
-                  )}
+                <div className={`flex-1 p-4 rounded-2xl text-[13px] leading-relaxed border select-text ${msg.sender==='user' ? 'bg-[#1a1a24] text-gray-100 border-white/5 font-medium rounded-tr-none ml-6' : 'bg-gradient-to-b from-[#121218] to-[#0f0f14] text-gray-200 border-white/5 rounded-tl-none mr-6 shadow-md'}`}>
+                  {msg.text.split(/(\*\*[^*]+\*\*)/).map((part, i) => {
+                    if (part.startsWith('**') && part.endsWith('**')) {
+                      const title = part.slice(2, -2);
+                      const alreadySaved = myList.some(m => m.title?.toLowerCase() === title.toLowerCase());
+                      return (
+                        <span key={i} className="inline-flex items-center gap-1 align-middle">
+                          <button onClick={() => setSelectedMovie(title)}
+                            className="text-yellow-400 font-black hover:text-yellow-300 hover:underline underline-offset-2 transition-colors cursor-pointer">
+                            {title}
+                          </button>
+                          {msg.sender === 'ai' && (
+                            <button
+                              title={alreadySaved ? 'Already in library' : 'Add to Watchlist'}
+                              onClick={async () => {
+                                if (alreadySaved) return;
+                                const { data: { session: s } } = await supabase.auth.getSession();
+                                if (!s?.user) return;
+                                await supabase.from('movies').insert({ user_id: s.user.id, title, status: 'watchlist', watched: false });
+                                setToast(`✓ Added "${title}" to watchlist`);
+                                setTimeout(() => setToast(''), 3500);
+                              }}
+                              className={`w-5 h-5 rounded-md flex items-center justify-center transition-all flex-shrink-0 ${alreadySaved ? 'text-blue-400' : 'text-gray-600 hover:text-blue-400 hover:bg-blue-900/30'}`}>
+                              <Bookmark size={11} fill={alreadySaved ? 'currentColor' : 'none'} />
+                            </button>
+                          )}
+                        </span>
+                      );
+                    }
+                    return <span key={i} style={{ whiteSpace: 'pre-wrap' }}>{part}</span>;
+                  })}
                 </div>
               </div>
             </div>

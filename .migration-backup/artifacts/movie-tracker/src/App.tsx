@@ -541,9 +541,9 @@ function MovieDetailModal({ movie, onClose, onToggle, onRate, onDelete, onEpisod
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-h-[92vh] bg-[#111116] rounded-t-3xl overflow-y-auto z-10 animate-slide-up">
+    <div className="fixed inset-0 z-[80]" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm pointer-events-none" />
+      <div className="absolute bottom-0 left-0 right-0 max-h-[92vh] bg-[#111116] rounded-t-3xl overflow-y-auto animate-slide-up" onClick={e => e.stopPropagation()}>
         {posterColor && (
           <div className="absolute inset-0 rounded-t-3xl pointer-events-none transition-opacity duration-700"
             style={{ background: `radial-gradient(ellipse at top, rgba(${posterColor},0.13) 0%, transparent 60%)`, zIndex: 0 }} />
@@ -703,39 +703,54 @@ function MovieDetailModal({ movie, onClose, onToggle, onRate, onDelete, onEpisod
 
 // ─── Result Card (Search) ─────────────────────────────────────────────────────
 function ResultCard({ item, mediaType, addedWatched, addedWatchlist, onAdd, onWatchlist }) {
-  const title = item.title || item.name;
-  const year  = (item.release_date || item.first_air_date || '').split('-')[0];
-  const genre = item.genre_ids?.[0] ? TMDB_GENRES[item.genre_ids[0]] : null;
-  const type  = mediaType || (item.media_type === 'tv' ? 'Series' : 'Movie');
+  const title    = item.title || item.name;
+  const year     = (item.release_date || item.first_air_date || '').split('-')[0];
+  const genre    = item.genre_ids?.[0] ? TMDB_GENRES[item.genre_ids[0]] : null;
+  const type     = mediaType || (item.media_type === 'tv' ? 'Series' : 'Movie');
+  const rating   = item.vote_average > 0 ? item.vote_average.toFixed(1) : null;
+  const industry = LANG_TO_INDUSTRY[item.original_language];
+  const indInfo  = industry ? INDUSTRIES.find(i => i.label === industry) : null;
 
   return (
-    <div className="flex bg-[#16161d] p-3 rounded-2xl gap-3 border border-white/5 items-center">
-      {item.poster_path
-        ? <img src={TMDB_IMG(item.poster_path, 'w200')} className="w-12 h-[72px] object-cover rounded-xl flex-shrink-0" alt="" />
-        : <div className="w-12 h-[72px] bg-[#1c1c26] rounded-xl flex items-center justify-center flex-shrink-0"><Film size={16} className="text-gray-700" /></div>
-      }
-      <div className="flex-1 min-w-0">
-        <h3 className="font-bold text-sm leading-snug truncate">{title}</h3>
-        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          {year  && <span className="text-xs text-yellow-600 font-bold">{year}</span>}
-          <span className="text-[9px] text-gray-600 uppercase tracking-wide">{type}</span>
-          {genre && <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${genreColor(genre)}`}>{genre}</span>}
+    <div className="flex bg-[#111116] rounded-2xl border border-white/[0.05] overflow-hidden">
+      {/* Poster */}
+      <div className="w-16 flex-shrink-0">
+        {item.poster_path
+          ? <img src={TMDB_IMG(item.poster_path, 'w200')} className="w-full h-full object-cover" style={{ minHeight: 96 }} alt="" />
+          : <div className="w-full bg-[#1c1c26] flex items-center justify-center" style={{ minHeight: 96 }}><Film size={18} className="text-gray-700" /></div>
+        }
+      </div>
+      {/* Info */}
+      <div className="flex-1 min-w-0 px-3 py-2.5 flex flex-col justify-between">
+        <div>
+          <h3 className="font-bold text-sm leading-snug text-white">{title}</h3>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            {year    && <span className="text-xs text-yellow-600 font-bold">{year}</span>}
+            <span className="text-[9px] text-gray-600 uppercase tracking-wide">{type}</span>
+            {indInfo && <span className="text-[9px]">{indInfo.flag}</span>}
+            {genre   && <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${genreColor(genre)}`}>{genre}</span>}
+          </div>
+          {rating && (
+            <div className="flex items-center gap-1 mt-1">
+              <Star size={9} fill="currentColor" className="text-yellow-500" />
+              <span className="text-[9px] text-yellow-600 font-bold">{rating}</span>
+            </div>
+          )}
         </div>
       </div>
-      <div className="flex flex-col gap-1.5 flex-shrink-0">
-        {/* Watchlist bookmark */}
+      {/* Buttons */}
+      <div className="flex flex-col gap-1.5 flex-shrink-0 justify-center pr-3">
         <button onClick={() => !addedWatched && !addedWatchlist && onWatchlist(item, type)}
           title="Save to Watchlist"
-          className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all text-[10px] font-black ${
+          className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
             addedWatchlist ? 'bg-blue-900/40 text-blue-400' :
             addedWatched  ? 'bg-[#1c1c26] text-gray-700 cursor-not-allowed' :
             'bg-[#1c1c26] text-gray-500 border border-white/10 hover:text-blue-400 hover:border-blue-500/30'
           }`}>
           <Bookmark size={14} fill={addedWatchlist ? 'currentColor' : 'none'} />
         </button>
-        {/* Add to library (watched) */}
         <button onClick={() => !addedWatched && !addedWatchlist && onAdd(item, type)}
-          className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all text-base font-black ${
+          className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black transition-all ${
             addedWatched  ? 'bg-green-900/40 text-green-400' :
             addedWatchlist? 'bg-[#1c1c26] text-gray-700 cursor-not-allowed' :
             'bg-yellow-500 text-black hover:bg-yellow-400 active:scale-95'
@@ -1049,37 +1064,35 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
             ))}
           </div>
 
-          {/* Cross-filter: genres + industry */}
-          {searchResults.length > 0 && (
-            <div className="mb-3 space-y-2">
-              <div>
-                <p className="text-[9px] uppercase tracking-widest text-gray-600 font-black mb-1.5">Genre</p>
-                <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-                  {ALL_GENRES.slice(0,12).map(g => (
-                    <FilterChip key={g} active={activeGenres.includes(g)} onClick={() => toggleGenre(g)}>
-                      {GENRE_ICONS[g]} {g}
-                    </FilterChip>
-                  ))}
-                </div>
+          {/* Cross-filter: genres + industry — always visible */}
+          <div className="mb-3 space-y-2">
+            <div>
+              <p className="text-[9px] uppercase tracking-widest text-gray-600 font-black mb-1.5">Genre</p>
+              <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+                {ALL_GENRES.slice(0,12).map(g => (
+                  <FilterChip key={g} active={activeGenres.includes(g)} onClick={() => toggleGenre(g)}>
+                    {GENRE_ICONS[g]} {g}
+                  </FilterChip>
+                ))}
               </div>
-              <div>
-                <p className="text-[9px] uppercase tracking-widest text-gray-600 font-black mb-1.5">Industry</p>
-                <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-                  {INDUSTRIES.map(ind => (
-                    <FilterChip key={ind.label} active={activeIndustries.includes(ind.label)} onClick={() => toggleInd(ind.label)}>
-                      {ind.flag} {ind.label}
-                    </FilterChip>
-                  ))}
-                </div>
-              </div>
-              {(activeGenres.length > 0 || activeIndustries.length > 0) && (
-                <button onClick={() => { setActiveGenres([]); setActiveIndustries([]); }}
-                  className="text-[9px] text-gray-600 hover:text-yellow-500 font-bold transition-colors">
-                  ✕ Clear filters
-                </button>
-              )}
             </div>
-          )}
+            <div>
+              <p className="text-[9px] uppercase tracking-widest text-gray-600 font-black mb-1.5">Industry</p>
+              <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+                {INDUSTRIES.map(ind => (
+                  <FilterChip key={ind.label} active={activeIndustries.includes(ind.label)} onClick={() => toggleInd(ind.label)}>
+                    {ind.flag} {ind.label}
+                  </FilterChip>
+                ))}
+              </div>
+            </div>
+            {(activeGenres.length > 0 || activeIndustries.length > 0) && (
+              <button onClick={() => { setActiveGenres([]); setActiveIndustries([]); }}
+                className="text-[9px] text-gray-600 hover:text-yellow-500 font-bold transition-colors">
+                ✕ Clear filters
+              </button>
+            )}
+          </div>
 
           {searchLoading && <p className="text-center text-gray-500 text-sm py-8">Searching…</p>}
           <div className="space-y-3">
