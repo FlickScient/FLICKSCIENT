@@ -4,13 +4,13 @@
   "buildCommand": "pnpm --filter @workspace/movie-tracker run build",
   "outputDirectory": "dist",
   "functions": {
-    "artifacts/api-server/api/index.ts": {
+    "api/index.ts": {
       "memory": 1024,
       "maxDuration": 30
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/artifacts/api-server/api/index.ts" },
+    { "source": "/api/(.*)", "destination": "/api/index.ts" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
