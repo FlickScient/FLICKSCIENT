@@ -135,6 +135,71 @@ function detectSpoilerIntent(input: string): 'full' | 'none' {
   return bangla ? 'full' : 'none'
 }
 
+// ─── Add to Watchlist/Watched Intent Detector ────────────────────────────────
+function detectAddIntent(input: string): { action: 'watchlist' | 'watched' | null, title: string | null } {
+  const n = normalizeInput(input)
+
+  // Extract title from bold markdown **Title** or quoted "Title" or 'Title'
+  const boldMatch   = input.match(/\*\*([^*]+)\*\*/)
+  const quotedMatch = input.match(/["']([^"']+)["']/)
+
+  // Patterns for watchlist intent — English + Banglish + Bangla
+  const watchlistPatterns = [
+    /add\s+(.+?)\s+to\s+(my\s+)?watchlist/i,
+    /save\s+(.+?)\s+(for later|to watch)/i,
+    /watchlist\s*(e|te|ay)?\s*(add|rakho|rakh|dao)\s+(.+)/i,
+    /(.+)\s+(watchlist\s*e|watchlist\s*te)\s+(rakho|add)/i,
+  ]
+
+  // Patterns for watched intent — English + Banglish + Bangla
+  const watchedPatterns = [
+    /mark\s+(.+?)\s+as\s+watched/i,
+    /i\s+(just\s+)?(watched|saw|finished)\s+(.+)/i,
+    /watched\s*(e|te|ay)?\s*(add|rakho|rakh|dao)\s+(.+)/i,
+    /(.+)\s+dekhechi/i,
+    /(.+)\s+dekhesi/i,
+    /(.+)\s+dekhলাm/i,
+    /(.+)\s+already\s+watched/i,
+  ]
+
+  for (const pattern of watchlistPatterns) {
+    const m = input.match(pattern)
+    if (m) {
+      const raw = boldMatch?.[1] || quotedMatch?.[1] || m[m.length - 1] || m[1] || null
+      const title = raw ? raw.replace(/[*"']/g, '').trim() : null
+      if (title) return { action: 'watchlist', title }
+    }
+  }
+
+  for (const pattern of watchedPatterns) {
+    const m = input.match(pattern)
+    if (m) {
+      const raw = boldMatch?.[1] || quotedMatch?.[1] || m[m.length - 1] || m[1] || null
+      const title = raw ? raw.replace(/[*"']/g, '').trim() : null
+      if (title) return { action: 'watched', title }
+    }
+  }
+
+  // Banglish keyword fallback using normalized input
+  const banglaWatchlist = ['watchlist e rakho', 'watchlist te rakho', 'watchlist e add', 'save koro', 'save kor']
+  const banglaWatched   = ['dekhechi', 'dekhesi', 'watched korechi', 'already dekhechi', 'shesh korechi']
+
+  for (const kw of banglaWatchlist) {
+    if (n.includes(normalizeInput(kw))) {
+      const title = boldMatch?.[1] || quotedMatch?.[1] || null
+      return { action: 'watchlist', title }
+    }
+  }
+  for (const kw of banglaWatched) {
+    if (n.includes(normalizeInput(kw))) {
+      const title = boldMatch?.[1] || quotedMatch?.[1] || null
+      return { action: 'watched', title }
+    }
+  }
+
+  return { action: null, title: null }
+}
+
 function isSimpleGreeting(input: string): boolean {
   const n = normalizeInput(input)
   // English greetings
@@ -350,7 +415,9 @@ function buildSystemPrompt(
   greeting       : boolean,
   watched        : string = '',
   watchlist      : string = '',
-  mahidInfo      : string = ''
+  mahidInfo      : string = '',
+  userLocalHour  : number = -1,
+  addIntent      : { action: 'watchlist' | 'watched' | null, title: string | null } = { action: null, title: null }
 ): string {
 
   const tasteDNA = (() => {
@@ -371,14 +438,13 @@ Ask ONE thing that reveals everything: "What's the last film that actually did s
     const summary          = userMemory.conversation_summary          || ''
     const name             = userMemory.name                          || ''
     const sessions         = userMemory.session_count                 || 0
-    const activeHour       = userMemory.last_active_hour              ?? -1
     const topics           = userMemory.topics_discussed?.slice(0, 8).join(', ') || ''
     const considered       = userMemory.films_considered?.slice(0, 5).join(', ') || ''
 
-    const timeOfDay = activeHour >= 5 && activeHour < 12 ? 'morning person'
-                    : activeHour >= 12 && activeHour < 18 ? 'afternoon watcher'
-                    : activeHour >= 18 && activeHour < 23 ? 'night owl'
-                    : activeHour >= 23 || activeHour < 5 ? 'late-night cinema mode'
+    const timeOfDay = userLocalHour >= 5 && userLocalHour < 12 ? 'morning person'
+                    : userLocalHour >= 12 && userLocalHour < 18 ? 'afternoon watcher'
+                    : userLocalHour >= 18 && userLocalHour < 23 ? 'night owl'
+                    : userLocalHour >= 23 || userLocalHour < 5 ? 'late-night cinema mode'
                     : ''
 
     return `
@@ -526,6 +592,10 @@ ${mahidInfo ? `
 The following facts were pulled live from a trusted source right before this conversation. Accept every statement below as true. Weave them naturally into conversation when relevant — never recite them robotically, never say "according to my knowledge base". Just know them like you'd know a close friend's life.
 
 ${mahidInfo}` : ''}
+${addIntent.action && addIntent.title ? `
+─── USER ACTION REQUEST ───
+The user wants to add "${addIntent.title}" to their ${addIntent.action === 'watchlist' ? 'watchlist' : 'watched list'}. Confirm you're doing it naturally in your voice — no robotic "I have added..." language. Keep it casual and in character. At the very end of your response, append this exact tag on a new line:
+<action>{"type":"${addIntent.action === 'watchlist' ? 'add_watchlist' : 'add_watched'}","title":"${addIntent.title.replace(/"/g, '\\"')}"}</action>` : ''}
 `.trim()
 }
 
@@ -618,6 +688,7 @@ serve(async (req) => {
     const conversationHistory: Array<{ role: string; content: string }> = body.conversationHistory || []
     const watchedList        = (body.watched   || '').trim()
     const watchlistList      = (body.watchlist || '').trim()
+    const userLocalHour      = typeof body.userLocalHour === 'number' ? body.userLocalHour : new Date().getUTCHours()
 
     // ── Identify user + load memory first (works without GROQ_API_KEY) ──────
     let hashedUserId: string | null = null
@@ -682,6 +753,7 @@ serve(async (req) => {
     const spoilerMode          = detectSpoilerIntent(userPrompt)
     const askingAboutMahid     = mentionsMahid(userPrompt) && !isVerifiedMahid && !isImposter
     const greeting             = isSimpleGreeting(userPrompt)
+    const addIntent            = detectAddIntent(userPrompt)
     const maxTokens            = greeting ? 250 : 2048
 
     // ── Fetch live knowledge base only when someone asks about Mahid ──────────
@@ -689,7 +761,8 @@ serve(async (req) => {
 
     // ── System prompt ─────────────────────────────────────────────────────────
     const systemPrompt = buildSystemPrompt(
-      userMemory, isVerifiedMahid, isImposter, spoilerMode, greeting, watchedList, watchlistList, mahidInfo
+      userMemory, isVerifiedMahid, isImposter, spoilerMode, greeting,
+      watchedList, watchlistList, mahidInfo, userLocalHour, addIntent
     )
 
     // ── If asking about Mahid — force the answer as conversation opener ───────
