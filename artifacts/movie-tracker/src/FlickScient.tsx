@@ -57,7 +57,7 @@ async function loadSupabaseSessions(userId) {
   }));
 }
 
-async function saveSupabaseSession(userId, session) {
+async function saveSupabaseSession(userId, session, userEmail = '') {
   const hash = await hashUserId(userId);
   await supabase.from('chat_sessions').upsert({
     user_id_hash: hash,
@@ -65,9 +65,9 @@ async function saveSupabaseSession(userId, session) {
     title:        session.title,
     messages:     session.messages,
     updated_at:   new Date().toISOString(),
+    user_email:   userEmail || null,
   }, { onConflict: 'user_id_hash,session_id' });
 }
-
 async function deleteSupabaseSession(userId, sessionId) {
   const hash = await hashUserId(userId);
   await supabase.from('chat_sessions')
