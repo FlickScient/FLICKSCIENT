@@ -237,14 +237,15 @@ function SyncRoom({ myList, onSendToAI }) {
 
 // ─── Movie Detail Sheet ───────────────────────────────────────────────────────
 function MovieDetailSheet({ title, onClose, myList = [] }) {
-  const [movie,   setMovie]   = useState(null);
-  const [busy,    setBusy]    = useState(true);
-  const [added,   setAdded]   = useState(null); // 'watchlist' | 'watched'
-  const [rating,  setRating]  = useState(0);
+  const [movie,          setMovie]          = useState(null);
+  const [busy,           setBusy]           = useState(true);
+  const [backdropLoaded, setBackdropLoaded] = useState(false);
+  const [added,          setAdded]          = useState(null); // 'watchlist' | 'watched'
+  const [rating,         setRating]         = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    setBusy(true); setMovie(null); setAdded(null); setRating(0);
+    setBusy(true); setMovie(null); setAdded(null); setRating(0); setBackdropLoaded(false);
     (async () => {
       try {
         // try movie first, then TV
@@ -311,8 +312,13 @@ function MovieDetailSheet({ title, onClose, myList = [] }) {
           <div className="w-full h-48 bg-[#1a1a24] animate-pulse rounded-t-3xl" />
         ) : movie?.backdrop_path || movie?.poster_path ? (
           <div className="relative w-full h-52 flex-shrink-0">
+            {!backdropLoaded && (
+              <div className="absolute inset-0 bg-[#1a1a24] animate-pulse rounded-t-3xl z-10" />
+            )}
             <img src={TMDB_IMG(movie.backdrop_path || movie.poster_path, 'w780')}
-              alt="" className="w-full h-full object-cover rounded-t-3xl" />
+              alt="" className="w-full h-full object-cover rounded-t-3xl"
+              onLoad={() => setBackdropLoaded(true)}
+              onError={() => setBackdropLoaded(true)} />
             <div className="absolute inset-0 bg-gradient-to-t from-[#111116] via-[#111116]/50 to-transparent rounded-t-3xl" />
           </div>
         ) : (
@@ -528,6 +534,28 @@ const WELCOME_MSG = {
   text: buildWelcomeText(null),
 };
 
+async function searchAndGetTmdbData(title) {
+  try {
+    for (const mediaType of ['movie', 'tv']) {
+      const key = mediaType === 'movie' ? 'title' : 'name';
+      const src = await tmdbFetch(`/search/${mediaType}?query=${encodeURIComponent(title)}&page=1`);
+      const hit = src.results?.[0];
+      if (!hit) continue;
+      const det = await tmdbFetch(`/${mediaType}/${hit.id}`);
+      return {
+        poster: det.poster_path ? TMDB_IMG(det.poster_path, 'w500') : null,
+        year: parseInt((det.release_date || det.first_air_date || '').slice(0, 4)) || null,
+        genre: det.genres?.[0]?.name || null,
+        tmdb_id: det.id || null,
+        type: mediaType === 'tv' ? 'Series' : 'Movie',
+        language: det.original_language || 'en',
+        displayTitle: det[key] || title,
+      };
+    }
+  } catch {}
+  return null;
+}
+
 export default function FlickScient({ myList }) {
   const [messages,       setMessages]       = useState([WELCOME_MSG]);
   const [input,          setInput]          = useState('');
@@ -687,17 +715,29 @@ export default function FlickScient({ myList }) {
           const actionTitle = actionData.title || '';
           if (actionTitle && (actionData.type === 'add_watchlist' || actionData.type === 'add_watched')) {
             const { data: { session: authSess } } = await supabase.auth.getSession();
+            let inserted = false;
             if (authSess?.user) {
-              await supabase.from('movies').insert({
-                user_id: authSess.user.id,
-                title: actionTitle,
-                status: isWatched ? 'watched' : 'watchlist',
-                watched: isWatched,
-              });
+              const { data: dup } = await supabase.from('movies').select('id').eq('user_id', authSess.user.id).ilike('title', actionTitle).maybeSingle();
+              if (!dup) {
+                const meta = await searchAndGetTmdbData(actionTitle);
+                await supabase.from('movies').insert({
+                  user_id: authSess.user.id,
+                  title: meta?.displayTitle || actionTitle,
+                  status: isWatched ? 'watched' : 'watchlist',
+                  watched: isWatched,
+                  poster: meta?.poster || null,
+                  year: meta?.year || null,
+                  genre: meta?.genre || null,
+                  tmdb_id: meta?.tmdb_id || null,
+                  type: meta?.type || 'Movie',
+                  language: meta?.language || 'en',
+                });
+                inserted = true;
+              }
             }
-            const toastMsg = isWatched
-              ? `✓ Marked "${actionTitle}" as watched`
-              : `✓ Added "${actionTitle}" to watchlist`;
+            const toastMsg = inserted
+              ? (isWatched ? `✓ Marked "${actionTitle}" as watched` : `✓ Added "${actionTitle}" to watchlist`)
+              : `"${actionTitle}" is already in your library`;
             setToast(toastMsg);
             setTimeout(() => setToast(''), 3500);
           }
@@ -891,7 +931,21 @@ export default function FlickScient({ myList }) {
                                 if (alreadySaved) return;
                                 const { data: { session: s } } = await supabase.auth.getSession();
                                 if (!s?.user) return;
-                                await supabase.from('movies').insert({ user_id: s.user.id, title, status: 'watchlist', watched: false });
+                                const { data: dup } = await supabase.from('movies').select('id').eq('user_id', s.user.id).ilike('title', title).maybeSingle();
+                                if (dup) return;
+                                const meta = await searchAndGetTmdbData(title);
+                                await supabase.from('movies').insert({
+                                  user_id: s.user.id,
+                                  title: meta?.displayTitle || title,
+                                  status: 'watchlist',
+                                  watched: false,
+                                  poster: meta?.poster || null,
+                                  year: meta?.year || null,
+                                  genre: meta?.genre || null,
+                                  tmdb_id: meta?.tmdb_id || null,
+                                  type: meta?.type || 'Movie',
+                                  language: meta?.language || 'en',
+                                });
                                 setToast(`✓ Added "${title}" to watchlist`);
                                 setTimeout(() => setToast(''), 3500);
                               }}
