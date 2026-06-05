@@ -72,6 +72,7 @@ async function deleteSupabaseSession(userId, sessionId) {
   const hash = await hashUserId(userId);
   await supabase.from('chat_sessions')
     .delete().eq('user_id_hash', hash).eq('session_id', sessionId);
+  const userEmailRef     = useRef('');
 }
 
 function fmtDate(ts) {
@@ -80,6 +81,7 @@ function fmtDate(ts) {
   if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
   if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`;
   if (diff < 604800000) return d.toLocaleDateString('en',{weekday:'short'});
+  userEmailRef.current = session.user.email || '';
   return d.toLocaleDateString('en',{month:'short',day:'numeric'});
 }
 
@@ -617,7 +619,7 @@ const name = data?.nickname || data?.name;
     const userId = currentUserIdRef.current;
     if (!userId) return;
     const sess = { id: sessionId, title: sessionTitle(messages), messages };
-    saveSupabaseSession(userId, sess).catch(() => {});
+    saveSupabaseSession(userId, sess, userEmailRef.current).catch(() => {});
     setSessions(prev => {
       const filtered = prev.filter(s => s.id !== sessionId);
       return [{ ...sess, updatedAt: Date.now() }, ...filtered].slice(0, MAX_SESSIONS);
