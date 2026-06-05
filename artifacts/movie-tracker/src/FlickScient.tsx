@@ -236,7 +236,7 @@ function SyncRoom({ myList, onSendToAI }) {
 }
 
 // ─── Movie Detail Sheet ───────────────────────────────────────────────────────
-function MovieDetailSheet({ title, onClose, myList = [] }) {
+export function MovieDetailSheet({ title, onClose, myList = [] }) {
   const [movie,          setMovie]          = useState(null);
   const [busy,           setBusy]           = useState(true);
   const [backdropLoaded, setBackdropLoaded] = useState(false);
@@ -594,10 +594,10 @@ export default function FlickScient({ myList }) {
       const hashed = await hashUserId(session.user.id);
       const { data } = await supabase
         .from('flickscient_users')
-        .select('user_memory')
+        .select('user_memory, nickname')
         .eq('user_id', hashed)
         .single();
-      const name = data?.user_memory?.name;
+      const name = data?.nickname || data?.user_memory?.name;
       if (name) {
         nicknameRef.current = name;
         setMessages(prev => {
@@ -666,6 +666,7 @@ export default function FlickScient({ myList }) {
             watchlist: watchlistTitles || '',
             userLocalHour: new Date().getHours(),
             userTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            nickname: nicknameRef.current || '',
           }),
         }
       );

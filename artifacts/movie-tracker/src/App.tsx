@@ -9,7 +9,7 @@ import {
   PlayCircle, TvMinimal, Clapperboard, RefreshCw, Sparkles,
   Sun, Moon, Eye, EyeOff, MessageSquare, Send,
 } from 'lucide-react';
-import FlickScient from './FlickScient';
+import FlickScient, { MovieDetailSheet } from './FlickScient';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const TMDB_TOKEN = import.meta.env.VITE_TMDB_TOKEN as string;
@@ -702,7 +702,7 @@ function MovieDetailModal({ movie, onClose, onToggle, onRate, onDelete, onEpisod
 }
 
 // ─── Result Card (Search) ─────────────────────────────────────────────────────
-function ResultCard({ item, mediaType, addedWatched, addedWatchlist, onAdd, onWatchlist }) {
+function ResultCard({ item, mediaType, addedWatched, addedWatchlist, onAdd, onWatchlist, onPreview }) {
   const title    = item.title || item.name;
   const year     = (item.release_date || item.first_air_date || '').split('-')[0];
   const genre    = item.genre_ids?.[0] ? TMDB_GENRES[item.genre_ids[0]] : null;
@@ -712,7 +712,8 @@ function ResultCard({ item, mediaType, addedWatched, addedWatchlist, onAdd, onWa
   const indInfo  = industry ? INDUSTRIES.find(i => i.label === industry) : null;
 
   return (
-    <div className="flex bg-[#111116] rounded-2xl border border-white/[0.05] overflow-hidden">
+    <div className="flex bg-[#111116] rounded-2xl border border-white/[0.05] overflow-hidden cursor-pointer hover:border-white/10 transition-colors"
+      onClick={() => onPreview && onPreview(title)}>
       {/* Poster */}
       <div className="w-16 flex-shrink-0">
         {item.poster_path
@@ -738,8 +739,8 @@ function ResultCard({ item, mediaType, addedWatched, addedWatchlist, onAdd, onWa
           )}
         </div>
       </div>
-      {/* Buttons */}
-      <div className="flex flex-col gap-1.5 flex-shrink-0 justify-center pr-3">
+      {/* Buttons — stop propagation so card click doesn't fire */}
+      <div className="flex flex-col gap-1.5 flex-shrink-0 justify-center pr-3" onClick={e => e.stopPropagation()}>
         <button onClick={() => !addedWatched && !addedWatchlist && onWatchlist(item, type)}
           title="Save to Watchlist"
           className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
@@ -793,6 +794,8 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
   const [trendingLoading,setTrendingLoading] = useState(false);
   const [trendingLoaded, setTrendingLoaded]  = useState(false);
 
+  const [selectedPreview, setSelectedPreview] = useState(null);
+
   const isAddedLib = (item) => addedLib.has(item.id) || existingTitles.has((item.title || item.name || '').toLowerCase() + ':lib');
   const isAddedWL  = (item) => addedWL.has(item.id)  || existingTitles.has((item.title || item.name || '').toLowerCase() + ':wl');
   const isAnyAdded = (item) => isAddedLib(item) || isAddedWL(item);
@@ -840,6 +843,41 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
     else                        setAddedLib(prev => new Set([...prev, item.id]));
     onAdded();
   };
+
+  const fetchFilteredResults = async () => {
+    setSearchLoading(true);
+    const mt = mediaTypeFilter === 'tv' ? 'tv' : 'movie';
+    try {
+      const genreIds = activeGenres.map(g => GENRE_ID_MAP[g]).filter(Boolean).join(',');
+      const industryLangs = activeIndustries.length > 0
+        ? activeIndustries.map(ind => INDUSTRIES.find(i => i.label === ind)?.langs?.[0] || '').filter(Boolean)
+        : [''];
+      const requests = industryLangs.map(lang => {
+        let url = `/discover/${mt}?sort_by=vote_count.desc&vote_count.gte=50&page=1`;
+        if (genreIds) url += `&with_genres=${genreIds}`;
+        if (lang) url += `&with_original_language=${lang}`;
+        return tmdb(url);
+      });
+      const responses = await Promise.all(requests);
+      const allResults = responses.flatMap(data =>
+        (data.results || []).map(m => ({ ...m, media_type: mt }))
+      );
+      const seen = new Set();
+      const unique = allResults.filter(m => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
+      unique.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+      setSearchResults(unique);
+    } catch (_) {}
+    setSearchLoading(false);
+  };
+
+  useEffect(() => {
+    if (query.trim()) return;
+    if (activeGenres.length === 0 && activeIndustries.length === 0 && mediaTypeFilter === 'all') {
+      setSearchResults([]);
+      return;
+    }
+    fetchFilteredResults();
+  }, [activeGenres, activeIndustries, mediaTypeFilter, query]);
 
   const doSearch = async (e) => {
     e.preventDefault();
@@ -1107,11 +1145,19 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
               .map(item => (
                 <ResultCard key={item.id} item={item}
                   addedWatched={isAddedLib(item)} addedWatchlist={isAddedWL(item)}
-                  onAdd={addToLibrary} onWatchlist={(i,t) => addToLibrary(i,t,'watchlist')} />
+                  onAdd={addToLibrary} onWatchlist={(i,t) => addToLibrary(i,t,'watchlist')}
+                  onPreview={title => setSelectedPreview(title)} />
               ))}
           </div>
           {!searchLoading && searchResults.length === 0 && query && (
             <p className="text-center text-gray-600 text-sm py-10">No results found</p>
+          )}
+          {!searchLoading && searchResults.length === 0 && !query && (activeGenres.length === 0 && activeIndustries.length === 0 && mediaTypeFilter === 'all') && (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <Search size={36} className="text-gray-800 mb-3" />
+              <p className="text-gray-600 text-sm font-bold">Search or pick a filter to browse</p>
+              <p className="text-gray-700 text-xs mt-1">Type a title above, or select genre / industry chips</p>
+            </div>
           )}
         </div>
       )}
@@ -1143,7 +1189,8 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
                 {browseResults.map(item => (
                   <ResultCard key={item.id} item={item} mediaType="Movie"
                     addedWatched={isAddedLib(item)} addedWatchlist={isAddedWL(item)}
-                    onAdd={(i,t) => addToLibrary(i,t)} onWatchlist={(i,t) => addToLibrary(i,t,'watchlist')} />
+                    onAdd={(i,t) => addToLibrary(i,t)} onWatchlist={(i,t) => addToLibrary(i,t,'watchlist')}
+                    onPreview={title => setSelectedPreview(title)} />
                 ))}
               </div>
               {browseResults.length > 0 && (
@@ -1186,7 +1233,8 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
                 {browseResults.map(item => (
                   <ResultCard key={item.id} item={item} mediaType="Movie"
                     addedWatched={isAddedLib(item)} addedWatchlist={isAddedWL(item)}
-                    onAdd={(i,t) => addToLibrary(i,t)} onWatchlist={(i,t) => addToLibrary(i,t,'watchlist')} />
+                    onAdd={(i,t) => addToLibrary(i,t)} onWatchlist={(i,t) => addToLibrary(i,t,'watchlist')}
+                    onPreview={title => setSelectedPreview(title)} />
                 ))}
               </div>
               {browseResults.length > 0 && (
@@ -1237,12 +1285,21 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
                   <ResultCard key={`${item.id}-${item.media_type}`} item={item}
                     mediaType={item.media_type==='tv'?'Series':'Movie'}
                     addedWatched={isAddedLib(item)} addedWatchlist={isAddedWL(item)}
-                    onAdd={(i,t) => addToLibrary(i,t)} onWatchlist={(i,t) => addToLibrary(i,t,'watchlist')} />
+                    onAdd={(i,t) => addToLibrary(i,t)} onWatchlist={(i,t) => addToLibrary(i,t,'watchlist')}
+                    onPreview={title => setSelectedPreview(title)} />
                 ))}
               </div>
             </>
           )}
         </div>
+      )}
+
+      {selectedPreview && (
+        <MovieDetailSheet
+          title={selectedPreview}
+          myList={[]}
+          onClose={() => setSelectedPreview(null)}
+        />
       )}
     </div>
   );
