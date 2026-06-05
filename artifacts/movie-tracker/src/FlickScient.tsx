@@ -594,10 +594,10 @@ export default function FlickScient({ myList }) {
       const hashed = await hashUserId(session.user.id);
       const { data } = await supabase
         .from('flickscient_users')
-        .select('user_memory, nickname')
-        .eq('user_id', hashed)
-        .single();
-      const name = data?.nickname || data?.user_memory?.name;
+       .select('nickname, name')
+.eq('user_id_hash', hashed)
+.maybeSingle();
+const name = data?.nickname || data?.name;
       if (name) {
         nicknameRef.current = name;
         setMessages(prev => {
