@@ -1118,9 +1118,12 @@ async function updateUserMemory(
       films_considered      : mergedConsidered,
     }
 
-    if (extracted.detected_name && !existingMemory.name) {
-      upsertPayload.name = extracted.detected_name
-    }
+    if (extracted.detected_name) {
+  if (!existingMemory.name) upsertPayload.name = extracted.detected_name
+  upsertPayload.nickname = extracted.detected_name
+}
+const nickDetect = userMessage.match(/call me ([a-zA-Z0-9_\-]+)/i) || userMessage.match(/my name is ([a-zA-Z0-9_\-]+)/i)
+if (nickDetect?.[1]) upsertPayload.nickname = nickDetect[1]
 
     if (Math.random() < MAX_NAME_FREQUENCY) {
       upsertPayload.last_name_used_at = Date.now()
