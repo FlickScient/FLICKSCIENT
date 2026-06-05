@@ -68,6 +68,8 @@ function sanitizeInput(input: string): string {
 }
 
 // ─── Multilingual Input Normalizer ────────────────────────────────────────────
+// Safely normalizes English, Bangla (বাংলা), and Banglish inputs.
+// Strips special characters while preserving Unicode letters and numbers.
 function normalizeInput(input: string): string {
   return (input || '')
     .toLowerCase()
@@ -80,18 +82,23 @@ function normalizeInput(input: string): string {
 // ─── Intent detectors ─────────────────────────────────────────────────────────
 function claimsMahidIdentity(input: string): boolean {
   const n = normalizeInput(input)
+  // English: "I'm Mahid", "I am Mahid", "this is Mahid"
   const english = /\b(i'?m|i am|this is|it'?s)\s+(mahid)\b/i.test(input)
+  // Banglish: "ami mahid", "ami-i mahid", "amar naam mahid"
   const banglish = [
     'ami mahid', 'ami i mahid', 'amar naam mahid', 'amar name mahid',
     'mahid ami', 'ami-i mahid',
   ].some(t => n.includes(normalizeInput(t)))
+  // Bangla script
   const bangla = /আমি\s*মাহিদ|আমার\s*নাম\s*মাহিদ/.test(input)
   return english || banglish || bangla
 }
 
 function mentionsMahid(input: string): boolean {
   const n = normalizeInput(input)
+  // English patterns
   const english = /\b(mahid|who'?s mahid|who is mahid|who made you|who built you|your creator|who created you|tell me about mahid|about you and mahid|who are you|what are you|who made flickscient|who built flickscient|who built moviesync|who made moviesync)\b/i.test(input)
+  // Banglish patterns — "tomake ke banaise", "ke banaice", "ke tomare banaise", "flickscient ke banaiche", "tor creator kon"
   const banglishTerms = [
     'mahid', 'tomake ke banaise', 'tomake ke banaiche', 'ke banaice', 'ke banaiche',
     'ke banalo', 'ke tomare banaise', 'ke tomare banaiche', 'tomare ke banaise',
@@ -101,18 +108,21 @@ function mentionsMahid(input: string): boolean {
     'ke likheche', 'ke toiri koreche', 'ke toiri korecho', 'ke baniyeche',
   ]
   const banglish = banglishTerms.some(t => n.includes(normalizeInput(t)))
+  // Bangla script
   const bangla = /মাহিদ|তোমাকে\s*কে\s*বানিয়েছে|কে\s*তোমাকে\s*বানিয়েছে|তোমার\s*স্রষ্টা|তুমি\s*কে|আপনি\s*কে|কে\s*তৈরি\s*করেছে/.test(input)
   return english || banglish || bangla
 }
 
 function detectSpoilerIntent(input: string): 'full' | 'none' {
   const n = normalizeInput(input)
+  // English spoiler keywords
   const english = [
     /spoil/i, /deep dive/i, /full breakdown/i, /what happens/i,
     /tell me everything/i, /the ending/i, /how does it end/i,
     /explain the plot/i, /full analysis/i, /ruin it/i,
   ]
   if (english.some(p => p.test(input))) return 'full'
+  // Banglish spoiler keywords
   const banglishSpoilers = [
     'spoiler dao', 'shesh ta bolo', 'ending bolo', 'ki hoise sheshe',
     'ki holo sheshe', 'poripurno golpo', 'sob bolo', 'details bolo',
@@ -120,6 +130,7 @@ function detectSpoilerIntent(input: string): 'full' | 'none' {
     'sheshe ki hoi', 'ki hoise', 'ending ta ki',
   ]
   if (banglishSpoilers.some(t => n.includes(normalizeInput(t)))) return 'full'
+  // Bangla script spoiler keywords
   const bangla = /শেষটা\s*বলো|এন্ডিং\s*বলো|সব\s*বলো|পুরো\s*গল্প|স্পয়লার/.test(input)
   return bangla ? 'full' : 'none'
 }
@@ -128,9 +139,11 @@ function detectSpoilerIntent(input: string): 'full' | 'none' {
 function detectAddIntent(input: string): { action: 'watchlist' | 'watched' | null, title: string | null } {
   const n = normalizeInput(input)
 
+  // Extract title from bold markdown **Title** or quoted "Title" or 'Title'
   const boldMatch   = input.match(/\*\*([^*]+)\*\*/)
   const quotedMatch = input.match(/["']([^"']+)["']/)
 
+  // Patterns for watchlist intent — English + Banglish + Bangla
   const watchlistPatterns = [
     /add\s+(.+?)\s+to\s+(my\s+)?watchlist/i,
     /save\s+(.+?)\s+(for later|to watch)/i,
@@ -138,6 +151,7 @@ function detectAddIntent(input: string): { action: 'watchlist' | 'watched' | nul
     /(.+)\s+(watchlist\s*e|watchlist\s*te)\s+(rakho|add)/i,
   ]
 
+  // Patterns for watched intent — English + Banglish + Bangla
   const watchedPatterns = [
     /mark\s+(.+?)\s+as\s+watched/i,
     /i\s+(just\s+)?(watched|saw|finished)\s+(.+)/i,
@@ -166,6 +180,7 @@ function detectAddIntent(input: string): { action: 'watchlist' | 'watched' | nul
     }
   }
 
+  // Banglish keyword fallback using normalized input
   const banglaWatchlist = ['watchlist e rakho', 'watchlist te rakho', 'watchlist e add', 'save koro', 'save kor']
   const banglaWatched   = ['dekhechi', 'dekhesi', 'watched korechi', 'already dekhechi', 'shesh korechi']
 
@@ -187,7 +202,9 @@ function detectAddIntent(input: string): { action: 'watchlist' | 'watched' | nul
 
 function isSimpleGreeting(input: string): boolean {
   const n = normalizeInput(input)
+  // English greetings
   const englishGreeting = /^(yo+|hi+|hey+|hello+|sup|wassup|hiya|hye|helo|heyo|ayo)[\s!.?]*$/i.test(input)
+  // Banglish greetings — common short openers
   const banglishTerms = [
     'ki obostha', 'ki khobor', 'kemon acho', 'kemon achen', 'kemon achis',
     'assalamu alaikum', 'walaikum assalam', 'salam', 'namaskar', 'nomoshkar',
@@ -195,6 +212,7 @@ function isSimpleGreeting(input: string): boolean {
     'bhalo acho', 'thik acho', 'thik achen', 'kotha achen',
   ]
   const banglishGreeting = banglishTerms.some(t => n === normalizeInput(t) || n.startsWith(normalizeInput(t)))
+  // Native Bangla greetings
   const banglaGreeting = /^(হ্যালো|হেই|আসসালামু\s*আলাইকুম|ওয়ালাইকুম\s*আসসালাম|সালাম|নমস্কার|কেমন\s*আছ|কেমন\s*আছেন|কি\s*অবস্থা|কি\s*খবর|কি\s*করছ|কি\s*করছেন|ভালো\s*আছ|ঠিক\s*আছ)[\s!.?]*$/.test(input.trim())
   return englishGreeting || banglishGreeting || banglaGreeting
 }
@@ -240,16 +258,18 @@ async function fetchKnowledgeBase(): Promise<string> {
     const res = await fetch(KNOWLEDGE_BASE_URL, { signal: AbortSignal.timeout(4000) })
     if (!res.ok) return ''
     const text = await res.text()
-    return text.trim().slice(0, 4000)
+    return text.trim().slice(0, 4000) // cap at 4k chars to keep context lean
   } catch {
     return ''
   }
 }
 
 // ─── Grounding Intent Detector ────────────────────────────────────────────────
+// Supports English, Bangla (বাংলা), and Banglish phonetic inputs.
 function needsGrounding(input: string): boolean {
   const n = normalizeInput(input)
 
+  // English terms
   const english = [
     'movie', 'film', 'series', 'show', 'tv show', 'song', 'music', 'album',
     'artist', 'singer', 'director', 'actor', 'actress', 'box office', 'trending',
@@ -263,6 +283,7 @@ function needsGrounding(input: string): boolean {
     '2024', '2025', '2026',
   ]
 
+  // Banglish (phonetic Bangla written in English letters)
   const banglish = [
     'suggest', 'koro', 'dekhi', 'dekhbo', 'dekhte', 'chai', 'dao',
     'gan', 'gaan', 'gayan', 'shono', 'shun', 'bolo', 'bol',
@@ -273,6 +294,7 @@ function needsGrounding(input: string): boolean {
     'arnob', 'shironamhin', 'miles', 'souls', 'feedback',
   ]
 
+  // Native Bangla script terms
   const bangla = [
     'চলচ্চিত্র', 'সিনেমা', 'মুভি', 'ছবি', 'নাটক', 'সিরিজ',
     'গান', 'সঙ্গীত', 'লিরিক্স', 'শিল্পী', 'গায়ক', 'গায়িকা',
@@ -291,8 +313,9 @@ async function fetchWebSearch(
   geminiKey : string,
   serperKey : string,
 ): Promise<string> {
-  const T = 3000
+  const T = 3000  // per-tier timeout ms — kept short to stay within Supabase execution limits
 
+  // ── TIER 1: Gemini 2.5 Flash with Google Search Grounding (best quality) ────
   if (geminiKey) {
     try {
       const res = await fetch(
@@ -316,6 +339,7 @@ async function fetchWebSearch(
           return text.slice(0, 3500)
         }
       } else if (res.status !== 429 && res.status !== 503) {
+        // Non-quota error (bad key, etc.) — log and fall through
         console.warn('[FlickScient] Gemini search non-quota error:', res.status)
       } else {
         console.warn('[FlickScient] Gemini search quota hit — falling to Tier 2')
@@ -325,6 +349,7 @@ async function fetchWebSearch(
     }
   }
 
+  // ── TIER 2: Serper.dev — structured Google snippets ─────────────────────────
   if (serperKey) {
     try {
       const res = await fetch('https://google.serper.dev/search', {
@@ -355,6 +380,7 @@ async function fetchWebSearch(
     }
   }
 
+  // ── TIER 3: DuckDuckGo Instant Answer API — zero-config, always available ───
   try {
     const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`
     const res = await fetch(url, { signal: AbortSignal.timeout(T) })
@@ -392,6 +418,7 @@ function buildSystemPrompt(
   mahidInfo      : string = '',
   userLocalHour  : number = -1,
   addIntent      : { action: 'watchlist' | 'watched' | null, title: string | null } = { action: null, title: null },
+  // ── Bug #4: nickname parameter ──────────────────────────────────────────────
   nickname       : string = ''
 ): string {
 
@@ -445,18 +472,19 @@ This is how you think. Every rec, every hook must be filtered through this lens.
 Make them feel genuinely seen. Not profiled. Seen.`.trim()
   })()
 
-  // ── Nickname block: shown regardless of taste profile, so even new users are greeted by name ──
-  const nickBlock = (nickname && !isVerifiedMahid)
-    ? `─── USER'S NICKNAME ───
-Their nickname/name is "${nickname}". Use it naturally — once when you greet them if it flows, occasionally after that. Never force it. Never start every message with their name.`
-    : ''
-
   const creatorBlock = isVerifiedMahid ? `
 THE GOAT IS IN THE BUILDING.
 Mahid built you from zero. The vision, the architecture, the whole thing — that's him.
 Talk to him raw, personal, behind-the-scenes. Match his energy exactly.
 No formal assistant behavior. He built you to be better than that.
 ` : ''
+
+  // ── Bug #4: nickname block — shown regardless of taste profile ──────────────
+  // Even new users with zero session history get greeted by name
+  const nickBlock = (nickname && !isVerifiedMahid)
+    ? `─── USER'S NICKNAME ───
+Their nickname/name is "${nickname}". Use it naturally — once when you greet them if it flows, occasionally after that. Never force it. Never start every message with their name.`
+    : ''
 
   const imposterBlock = isImposter ? `
 IMPOSTER ALERT — ROAST REQUIRED. Do NOT give the standard Mahid description. Do NOT say "Mahid built me." That answer is locked for the real one.
@@ -652,6 +680,7 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  // ── Pull env vars up-front (never throws) ─────────────────────────────────
   const apiKey       = Deno.env.get('GROQ_API_KEY')
   const geminiKey    = Deno.env.get('GEMINI_API_KEY')    || ''
   const serperKey    = Deno.env.get('SERPER_API_KEY')    || ''
@@ -670,9 +699,10 @@ serve(async (req) => {
     const watchedList        = (body.watched   || '').trim()
     const watchlistList      = (body.watchlist || '').trim()
     const userLocalHour      = typeof body.userLocalHour === 'number' ? body.userLocalHour : new Date().getUTCHours()
-    // Bug #4 fix: read nickname passed from the frontend
+    // ── Bug #4: read nickname passed from the frontend ─────────────────────
     const clientNickname     = ((body.nickname as string) || '').trim()
 
+    // ── Identify user + load memory first (works without GROQ_API_KEY) ──────
     let hashedUserId: string | null = null
     if (rawUserId) {
       hashedUserId = await hashUserId(rawUserId)
@@ -688,6 +718,7 @@ serve(async (req) => {
     if (sbUrl && sbKey) {
       supabase = createClient(sbUrl, sbKey)
 
+      // Check creator by email (most reliable)
       if (rawUserId && creatorEmail) {
         try {
           const { data: authUser } = await supabase.auth.admin.getUserById(rawUserId)
@@ -696,8 +727,9 @@ serve(async (req) => {
         } catch { /* non-fatal */ }
       }
 
+      // Also honour is_creator flag in DB
       if (hashedUserId) {
-        // Bug #4 fix: also select the `nickname` column from flickscient_users
+        // ── Bug #4: also select the `nickname` column from flickscient_users ─
         const { data, error } = await supabase
           .from('flickscient_users')
           .select('nickname, name, taste_profile, conversation_summary, last_name_used_at, memory_reference_count, is_creator, session_count, last_active_hour, topics_discussed, films_considered')
@@ -715,10 +747,11 @@ serve(async (req) => {
 
     isCreatorOuter = isCreator
 
-    // Bug #4 fix: compute effective name — prefer DB nickname, then AI-detected name, then client-passed
-    const dbNickname   = ((userMemory as any)?.nickname || '').trim()
+    // ── Bug #4: compute effective name — DB nickname → AI name → client nickname
+    const dbNickname    = ((userMemory as any)?.nickname || '').trim()
     const effectiveName = dbNickname || userMemory?.name || clientNickname || ''
 
+    // ── Guard: API key ────────────────────────────────────────────────────────
     if (!apiKey) {
       return adminErr(
         isCreator,
@@ -731,6 +764,7 @@ serve(async (req) => {
       return adminErr(isCreator, 'Empty prompt after sanitization.', "Didn't catch that — try again?")
     }
 
+    // ── Intent flags ──────────────────────────────────────────────────────────
     const isVerifiedMahid      = isCreator
     const isImposter           = claimsMahidIdentity(userPrompt) && !isVerifiedMahid
     const spoilerMode          = detectSpoilerIntent(userPrompt)
@@ -739,16 +773,21 @@ serve(async (req) => {
     const addIntent            = detectAddIntent(userPrompt)
     const maxTokens            = greeting ? 250 : 2048
 
+    // ── Fetch live knowledge base only when someone asks about Mahid ──────────
     const mahidInfo = (askingAboutMahid || isVerifiedMahid) ? await fetchKnowledgeBase() : ''
 
-    // Bug #4 fix: pass effectiveName as the nickname parameter
+    // ── System prompt ─────────────────────────────────────────────────────────
+    // ── Bug #4: pass effectiveName as the nickname parameter ──────────────────
     const systemPrompt = buildSystemPrompt(
       userMemory, isVerifiedMahid, isImposter, spoilerMode, greeting,
       watchedList, watchlistList, mahidInfo, userLocalHour, addIntent, effectiveName
     )
 
+    // ── If asking about Mahid — force the answer as conversation opener ───────
+    // Groq continues FROM this answer — dodging impossible, answer already written
     const mahidOpener = askingAboutMahid ? buildMahidAnswer(isVerifiedMahid) : ''
 
+    // ── Multi-tier web search grounding: Gemini → Serper → DuckDuckGo ────────
     let groundingCtx = ''
     if (!greeting && needsGrounding(userPrompt)) {
       try {
@@ -762,6 +801,7 @@ serve(async (req) => {
       ? `${systemPrompt}\n\n### REAL-TIME VERIFIED FACTS:\n${groundingCtx}\n\nCRITICAL INSTRUCTION: You must strictly answer using ONLY the verified facts provided above. If the search context is empty, does not mention the specific song/band requested, or fails to verify a fact, you must say: "I couldn't find verified live data for that right now." Never invent tracklists. Never mix up bands. Never guess from offline training memory. Never create facts that are not present in the search context.`
       : systemPrompt
 
+    // ── Build multi-turn history for Groq (OpenAI message format) ────────────
     const historyContents = conversationHistory
       .filter(m => m.content && m.content.trim())
       .map(m => ({
@@ -780,6 +820,7 @@ serve(async (req) => {
           { role: 'user', content: userPrompt },
         ]
 
+    // ── Call Groq ─────────────────────────────────────────────────────────────
     const controller = new AbortController()
     const timeoutId  = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
 
@@ -820,6 +861,7 @@ serve(async (req) => {
 
     clearTimeout(timeoutId)
 
+    // ── Auto-fallback: if primary model hits rate limit or 503, silently retry ─
     if (geminiRes.status === 429 || geminiRes.status === 503) {
       console.warn('[FlickScient] Primary model rate-limited — switching to fallback model')
       clearTimeout(timeoutId)
@@ -871,6 +913,7 @@ serve(async (req) => {
           const errJson = JSON.parse(errText)
           const errDump = JSON.stringify(errJson).toLowerCase()
 
+          // Try to extract retryDelay from Google's RetryInfo detail
           let retrySeconds = 0
           const details: any[] = errJson?.error?.details || []
           for (const d of details) {
@@ -881,6 +924,7 @@ serve(async (req) => {
           }
 
           if (errDump.includes('per_day') || errDump.includes('requests_per_day') || errDump.includes('rpd')) {
+            // Daily limit — resets at midnight Pacific = 08:00 UTC
             const now   = new Date()
             const reset = new Date()
             reset.setUTCHours(8, 0, 0, 0)
@@ -888,6 +932,7 @@ serve(async (req) => {
             const diffMs  = reset.getTime() - now.getTime()
             const diffH   = Math.floor(diffMs / 3600000)
             const diffM   = Math.floor((diffMs % 3600000) / 60000)
+            // Format reset time in user-friendly local string (UTC label)
             const resetHH = String(reset.getUTCHours()).padStart(2, '0')
             const resetMM = String(reset.getUTCMinutes()).padStart(2, '0')
             const waitStr = diffH > 0 ? `${diffH}h ${diffM}m` : `${diffM}m`
@@ -908,6 +953,7 @@ serve(async (req) => {
               msg = "Token capacity maxed 🧠 That was a big one. 60 seconds and I'm back."
             }
           } else if (retrySeconds > 0) {
+            // Fallback: we have a retry delay but don't know the specific limit type
             const secs = retrySeconds
             const timeStr = getTimeInMinutes(secs)
             msg = secs < 60
@@ -931,12 +977,14 @@ serve(async (req) => {
       throw new Error(`Groq error: ${geminiRes.status}`)
     }
 
+    // ── Stream the response back to the client word-by-word ───────────────────
     const encoder  = new TextEncoder()
     let   fullText = ''
 
     const stream = new ReadableStream({
       async start(ctrl) {
         try {
+          // Stream mahidOpener first if present
           if (mahidOpener) {
             fullText += mahidOpener
             ctrl.enqueue(encoder.encode(mahidOpener))
@@ -964,8 +1012,9 @@ serve(async (req) => {
             }
           }
         } catch (streamErr: any) {
+          // Send a graceful fallback instead of crashing the connection
           const fallback = fullText
-            ? ''
+            ? '' // partial text already sent — just close cleanly
             : "Hold on, be right back 🎬"
           if (fallback) ctrl.enqueue(encoder.encode(fallback))
           console.error('[FlickScient] Stream error:', streamErr?.message ?? streamErr)
@@ -1043,11 +1092,13 @@ async function updateUserMemory(
 
     const mergedTaste = mergeTasteProfiles(existingMemory.taste_profile, extracted.updated_taste_profile)
 
+    // Merge topics_discussed (deduplicate, keep latest 20)
     const mergedTopics = [...new Set([
       ...(existingMemory.topics_discussed || []),
       ...(extracted.topics_discussed || []),
     ])].slice(-20)
 
+    // Merge films_considered (deduplicate, keep latest 15)
     const mergedConsidered = [...new Set([
       ...(existingMemory.films_considered || []),
       ...(extracted.films_considered || []),
