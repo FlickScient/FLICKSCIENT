@@ -2227,7 +2227,7 @@ useEffect(() => {
             <h1 className="text-2xl font-black mt-0.5 text-purple-400">FlickScient</h1>
             <p className="text-[9px] text-gray-700 mt-0.5 pb-4">AI Film Companion · powered by Groq</p>
           </div>
-          <FlickScient myList={movies} />
+          <FlickScient myList={movies} onLibraryUpdate={fetchMovies} />
         </div>
       )}
 
