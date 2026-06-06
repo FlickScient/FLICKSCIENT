@@ -105,7 +105,7 @@ function mentionsMahid(input: string): boolean {
     'flickscient ke banaiche', 'flickscient ke banaise', 'moviesync ke banaiche',
     'tor creator', 'apnar creator', 'tomar creator', 'ke tumi', 'tumi ki',
     'tumi kon', 'tumi ke', 'apni ke', 'tomar porichoy', 'tor porichoy',
-    'ke likheche', 'ke toiri koreche', 'ke toiri korecho', 'ke baniyeche',
+    'ke likheche', 'ke toiri koreche', 'ke toiri korecho', 'ke baniyeche','ei shala',
   ]
   const banglish = banglishTerms.some(t => n.includes(normalizeInput(t)))
   // Bangla script
