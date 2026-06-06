@@ -1022,7 +1022,7 @@ serve(async (req) => {
           try { ctrl.close() } catch { /* already closed */ }
           if (hashedUserId && supabase && fullText) {
             const nextRefCount = Math.min((userMemory?.memory_reference_count || 0) + 1, MAX_MEMORY_REFS + 1)
-            updateUserMemory(supabase, hashedUserId, userPrompt, fullText, userMemory || {}, apiKey, nextRefCount)
+            updateUserMemory(supabase, hashedUserId, rawUserId, userPrompt, fullText, userMemory || {}, apiKey, nextRefCount)
               .catch(e => console.error('[FlickScient] Memory update failed:', e))
           }
         }
@@ -1047,6 +1047,7 @@ serve(async (req) => {
 async function updateUserMemory(
   supabase      : any,
   hashedUserId  : string,
+  rawUserId     : string | null,
   userMessage   : string,
   aiResponse    : string,
   existingMemory: UserMemory,
@@ -1108,6 +1109,7 @@ async function updateUserMemory(
 
     const upsertPayload: Record<string, any> = {
       user_id_hash          : hashedUserId,
+      email                 : rawUserId ? (await supabase.auth.admin.getUserById(rawUserId))?.data?.user?.email || null : null,
       taste_profile         : mergedTaste,
       conversation_summary  : extracted.updated_summary || existingMemory.conversation_summary,
       updated_at            : new Date().toISOString(),
