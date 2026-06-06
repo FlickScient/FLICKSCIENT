@@ -72,7 +72,6 @@ async function deleteSupabaseSession(userId, sessionId) {
   const hash = await hashUserId(userId);
   await supabase.from('chat_sessions')
     .delete().eq('user_id_hash', hash).eq('session_id', sessionId);
-  const userEmailRef     = useRef('');
 }
 
 function fmtDate(ts) {
@@ -81,7 +80,6 @@ function fmtDate(ts) {
   if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
   if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`;
   if (diff < 604800000) return d.toLocaleDateString('en',{weekday:'short'});
-  userEmailRef.current = session.user.email || '';
   return d.toLocaleDateString('en',{month:'short',day:'numeric'});
 }
 
@@ -574,6 +572,7 @@ export default function FlickScient({ myList }) {
   const currentUserIdRef = useRef(null);
   const countdownRef     = useRef(null);
   const nicknameRef      = useRef(null);
+  const userEmailRef     = useRef('');
 
   useEffect(() => { chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
 
@@ -583,6 +582,7 @@ export default function FlickScient({ myList }) {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return;
       currentUserIdRef.current = session.user.id;
+      userEmailRef.current = session.user.email || '';
       const loaded = await loadSupabaseSessions(session.user.id);
       setSessions(loaded);
     })();
