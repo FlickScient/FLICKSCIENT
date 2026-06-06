@@ -83,7 +83,7 @@ function normalizeInput(input: string): string {
 function claimsMahidIdentity(input: string): boolean {
   const n = normalizeInput(input)
   // English: "I'm Mahid", "I am Mahid", "this is Mahid"
-  const english = /\b(i'?m|i am|this is|it'?s)\s+(mahid)\b/i.test(input)
+  const english = /\b(i'?m|i am|this is|it'?s)\s+mahid\s*[!.?]*$/i.test(input)
   // Banglish: "ami mahid", "ami-i mahid", "amar naam mahid"
   const banglish = [
     'ami mahid', 'ami i mahid', 'amar naam mahid', 'amar name mahid',
