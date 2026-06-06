@@ -745,7 +745,40 @@ const name = data?.nickname || data?.name;
           }
         } catch {}
       }
-
+      // Fallback: if no action tag, detect intent directly from user message
+if (!actionMatch) {
+  const wlMatch = userQuery.match(/(?:add|save)\s+(.+?)\s+(?:to\s+(?:my\s+)?watchlist|for\s+later)/i);
+  const wdMatch = userQuery.match(/(?:mark\s+(.+?)\s+as\s+watched|i\s+(?:just\s+)?(?:watched|saw|finished)\s+(.+))/i);
+  const fallbackTitle = (wlMatch?.[1] || wdMatch?.[1] || wdMatch?.[2] || '').trim();
+  const fallbackIsWatched = !!wdMatch;
+  if (fallbackTitle) {
+    const { data: { session: authSess } } = await supabase.auth.getSession();
+    if (authSess?.user) {
+      const { data: dup } = await supabase.from('movies').select('id').eq('user_id', authSess.user.id).ilike('title', fallbackTitle).maybeSingle();
+      if (!dup) {
+        const meta = await searchAndGetTmdbData(fallbackTitle);
+        await supabase.from('movies').insert({
+          user_id: authSess.user.id,
+          title: meta?.displayTitle || fallbackTitle,
+          status: fallbackIsWatched ? 'watched' : 'watchlist',
+          watched: fallbackIsWatched,
+          poster: meta?.poster || null,
+          year: meta?.year || null,
+          genre: meta?.genre || null,
+          tmdb_id: meta?.tmdb_id || null,
+          type: meta?.type || 'Movie',
+          language: meta?.language || 'en',
+        });
+        setToast(fallbackIsWatched ? `✓ Marked "${fallbackTitle}" as watched` : `✓ Added "${fallbackTitle}" to watchlist`);
+        setTimeout(() => setToast(''), 3500);
+      } else {
+        setToast(`"${fallbackTitle}" is already in your library`);
+        setTimeout(() => setToast(''), 3500);
+      }
+    }
+  }
+}
+      
       setIsStreaming(false);
     } catch (error) {
       let errMsg = "Connection dropped — try again in a sec 🎬";
