@@ -556,7 +556,7 @@ async function searchAndGetTmdbData(title) {
   return null;
 }
 
-export default function FlickScient({ myList }) {
+export default function FlickScient({ myList,onLibraryUpdate }) {
   const [messages,       setMessages]       = useState([WELCOME_MSG]);
   const [input,          setInput]          = useState('');
   const [loading,        setLoading]        = useState(false);
