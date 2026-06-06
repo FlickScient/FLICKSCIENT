@@ -145,7 +145,7 @@ function detectAddIntent(input: string): { action: 'watchlist' | 'watched' | nul
 
   // Patterns for watchlist intent — English + Banglish + Bangla
   const watchlistPatterns = [
-    /add\s+(.+?)\s+to\s+(my\s+)?watchlist/i,
+    /add\s+(.+?)\s+to\s+(my\s+)?(watchlist|library)/i,
     /save\s+(.+?)\s+(for later|to watch)/i,
     /watchlist\s*(e|te|ay)?\s*(add|rakho|rakh|dao)\s+(.+)/i,
     /(.+)\s+(watchlist\s*e|watchlist\s*te)\s+(rakho|add)/i,
