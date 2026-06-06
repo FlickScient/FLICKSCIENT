@@ -720,8 +720,7 @@ const name = data?.nickname || data?.name;
             const { data: { session: authSess } } = await supabase.auth.getSession();
             let inserted = false;
             if (authSess?.user) {
-              const { data: dup } = await supabase.from('movies').select('id').eq('user_id', authSess.user.id).ilike('title', actionTitle).maybeSingle();
-              if (!dup) {
+               const { data: dup } = await supabase.from('movies').select('id').eq('user_id', authSess.user.id).ilike('title', actionTitle.trim()).maybeSingle();             if (!dup) {
                 const meta = await searchAndGetTmdbData(actionTitle);
                 await supabase.from('movies').insert({
                   user_id: authSess.user.id,
