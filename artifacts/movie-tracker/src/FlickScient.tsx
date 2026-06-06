@@ -758,7 +758,7 @@ if (!actionMatch) {
       const { data: dup } = await supabase.from('movies').select('id').eq('user_id', authSess.user.id).ilike('title', fallbackTitle).maybeSingle();
       if (!dup) {
         const meta = await searchAndGetTmdbData(fallbackTitle);
-        await supabase.from('movies').insert({
+        const { error: insertError } = await supabase.from('movies').insert({
           user_id: authSess.user.id,
           title: meta?.displayTitle || fallbackTitle,
           status: fallbackIsWatched ? 'watched' : 'watchlist',
@@ -770,6 +770,11 @@ if (!actionMatch) {
           type: meta?.type || 'Movie',
           language: meta?.language || 'en',
         });
+         if (insertError) {
+  setToast(`Failed: ${insertError.message}`);
+  setTimeout(() => setToast(''), 5000);
+  return;
+}  
         onLibraryUpdate?.();
         setToast(fallbackIsWatched ? `✓ Marked "${fallbackTitle}" as watched` : `✓ Added "${fallbackTitle}" to watchlist`);
         setTimeout(() => setToast(''), 3500);
