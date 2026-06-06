@@ -836,8 +836,21 @@ function SearchPage({ onBack, onAdded, existingTitles }) {
     if (industry)  payload.industry = industry;
     if (item.id)   payload.tmdb_id  = item.id;
 
-    const { error } = await supabase.from('movies').insert([payload]);
-    if (error) { alert('Could not add: ' + error.message); return; }
+const { data: existing } = await supabase
+  .from('movies')
+  .select('id')
+  .eq('user_id', user.id)
+  .ilike('title', payload.title.trim())
+  .maybeSingle();
+
+if (existing) {
+  if (status === 'watchlist') setAddedWL(prev => new Set([...prev, item.id]));
+  else setAddedLib(prev => new Set([...prev, item.id]));
+  return;
+}
+
+const { error } = await supabase.from('movies').insert([payload]);
+if (error) { alert('Could not add: ' + error.message); return; }
 
     if (status === 'watchlist') setAddedWL(prev => new Set([...prev, item.id]));
     else                        setAddedLib(prev => new Set([...prev, item.id]));
