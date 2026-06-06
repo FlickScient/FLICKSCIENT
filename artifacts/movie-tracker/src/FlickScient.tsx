@@ -748,7 +748,7 @@ const name = data?.nickname || data?.name;
       }
       // Fallback: if no action tag, detect intent directly from user message
 if (!actionMatch) {
-  const wlMatch = userQuery.match(/(?:add|save)\s+(.+?)\s+(?:to\s+(?:my\s+)?watchlist|for\s+later)/i);
+  const wlMatch = userQuery.match(/(?:add|save)\s+(.+?)\s+(?:to\s+(?:my\s+)?(?:watchlist|library)|for\s+later)/i);
   const wdMatch = userQuery.match(/(?:mark\s+(.+?)\s+as\s+watched|i\s+(?:just\s+)?(?:watched|saw|finished)\s+(.+))/i);
   const fallbackTitle = (wlMatch?.[1] || wdMatch?.[1] || wdMatch?.[2] || '').trim();
   const fallbackIsWatched = !!wdMatch;
