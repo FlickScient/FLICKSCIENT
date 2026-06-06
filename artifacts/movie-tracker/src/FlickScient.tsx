@@ -740,6 +740,7 @@ const name = data?.nickname || data?.name;
             const toastMsg = inserted
               ? (isWatched ? `✓ Marked "${actionTitle}" as watched` : `✓ Added "${actionTitle}" to watchlist`)
               : `"${actionTitle}" is already in your library`;
+            onLibraryUpdate?.();
             setToast(toastMsg);
             setTimeout(() => setToast(''), 3500);
           }
@@ -769,6 +770,7 @@ if (!actionMatch) {
           type: meta?.type || 'Movie',
           language: meta?.language || 'en',
         });
+        onLibraryUpdate?.();
         setToast(fallbackIsWatched ? `✓ Marked "${fallbackTitle}" as watched` : `✓ Added "${fallbackTitle}" to watchlist`);
         setTimeout(() => setToast(''), 3500);
       } else {
