@@ -933,7 +933,7 @@ const name = data?.nickname || data?.name;
                                 if (alreadySaved) return;
                                 const { data: { session: s } } = await supabase.auth.getSession();
                                 if (!s?.user) return;
-                                const { data: dup } = await supabase.from('movies').select('id').eq('user_id', s.user.id).ilike('title', title).maybeSingle();
+                                const { data: dup } = await supabase.from('movies').select('id').eq('user_id', s.user.id).ilike('title', title.trim()).maybeSingle();
                                 if (dup) return;
                                 const meta = await searchAndGetTmdbData(title);
                                 await supabase.from('movies').insert({
