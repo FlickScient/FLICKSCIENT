@@ -722,7 +722,7 @@ if (userId) {
         const actionTitle = (actionData.title || '').trim();
         if (!actionTitle) continue;
         if (actionData.type !== 'add_watchlist' && actionData.type !== 'add_watched') continue;
-        const { data: dup } = await supabase.from('movies').select('id')..eq('user_id', userId).ilike('title', actionTitle).maybeSingle();
+        const { data: dup } = await supabase.from('movies').select('id').eq('user_id', userId).ilike('title', actionTitle).maybeSingle();
         if (dup) { skippedTitles.push(actionTitle); continue; }
         const meta = await searchAndGetTmdbData(actionTitle);
         const { error: insertErr } = await supabase.from('movies').insert({
