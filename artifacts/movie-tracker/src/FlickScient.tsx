@@ -711,8 +711,8 @@ const actionMatches = [...fullText.matchAll(/<action>([\s\S]*?)<\/action>/gi)];
 const cleanText = fullText.replace(/<action>[\s\S]*?<\/action>/g, '').trim();
 if (actionMatches.length > 0) {
   setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: cleanText } : m));
-  const { data: { session: authSess } } = await supabase.auth.getSession();
-  if (authSess?.user) {
+  const userId = currentUserIdRef.current;
+if (userId) {
     let insertedTitles = [];
     let skippedTitles = [];
     for (const match of actionMatches) {
@@ -722,11 +722,11 @@ if (actionMatches.length > 0) {
         const actionTitle = (actionData.title || '').trim();
         if (!actionTitle) continue;
         if (actionData.type !== 'add_watchlist' && actionData.type !== 'add_watched') continue;
-        const { data: dup } = await supabase.from('movies').select('id').eq('user_id', authSess.user.id).ilike('title', actionTitle).maybeSingle();
+        const { data: dup } = await supabase.from('movies').select('id')..eq('user_id', userId).ilike('title', actionTitle).maybeSingle();
         if (dup) { skippedTitles.push(actionTitle); continue; }
         const meta = await searchAndGetTmdbData(actionTitle);
         const { error: insertErr } = await supabase.from('movies').insert({
-          user_id: authSess.user.id,
+          user_id: userId,
           title: meta?.displayTitle || actionTitle,
           status: isWatched ? 'watched' : 'watchlist',
           watched: isWatched,
