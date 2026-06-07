@@ -706,46 +706,50 @@ const name = data?.nickname || data?.name;
         setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: displayText } : m));
       }
 
-      // ── Parse AI action tags ───────────────────────────────────────────────
-      const actionMatch = fullText.match(/<action>([\s\S]*?)<\/action>/i);
-      if (actionMatch) {
-        try {
-          const actionData = JSON.parse(actionMatch[1].trim());
-          const cleanText = fullText.replace(/<action>[\s\S]*?<\/action>/, '').trim();
-          setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: cleanText } : m));
-
-          const isWatched = actionData.type === 'add_watched';
-          const actionTitle = actionData.title || '';
-          if (actionTitle && (actionData.type === 'add_watchlist' || actionData.type === 'add_watched')) {
-            const { data: { session: authSess } } = await supabase.auth.getSession();
-            let inserted = false;
-            if (authSess?.user) {
-               const { data: dup } = await supabase.from('movies').select('id').eq('user_id', authSess.user.id).ilike('title', actionTitle.trim()).maybeSingle();             if (!dup) {
-                const meta = await searchAndGetTmdbData(actionTitle);
-                await supabase.from('movies').insert({
-                  user_id: authSess.user.id,
-                  title: meta?.displayTitle || actionTitle,
-                  status: isWatched ? 'watched' : 'watchlist',
-                  watched: isWatched,
-                  poster: meta?.poster || null,
-                  year: meta?.year || null,
-                  genre: meta?.genre || null,
-                  tmdb_id: meta?.tmdb_id || null,
-                  type: meta?.type || 'Movie',
-                  language: meta?.language || 'en',
-                });
-                inserted = true;
-              }
-            }
-            const toastMsg = inserted
-              ? (isWatched ? `✓ Marked "${actionTitle}" as watched` : `✓ Added "${actionTitle}" to watchlist`)
-              : `"${actionTitle}" is already in your library`;
-            setTimeout(() => onLibraryUpdate?.(), 500);
-            setToast(toastMsg);
-            setTimeout(() => setToast(''), 3500);
-          }
-        } catch {}
-      }
+     // ── Parse AI action tags (handles multiple) ────────────────────────────
+const actionMatches = [...fullText.matchAll(/<action>([\s\S]*?)<\/action>/gi)];
+const cleanText = fullText.replace(/<action>[\s\S]*?<\/action>/g, '').trim();
+if (actionMatches.length > 0) {
+  setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: cleanText } : m));
+  const { data: { session: authSess } } = await supabase.auth.getSession();
+  if (authSess?.user) {
+    let insertedTitles = [];
+    let skippedTitles = [];
+    for (const match of actionMatches) {
+      try {
+        const actionData = JSON.parse(match[1].trim());
+        const isWatched = actionData.type === 'add_watched';
+        const actionTitle = (actionData.title || '').trim();
+        if (!actionTitle) continue;
+        if (actionData.type !== 'add_watchlist' && actionData.type !== 'add_watched') continue;
+        const { data: dup } = await supabase.from('movies').select('id').eq('user_id', authSess.user.id).ilike('title', actionTitle).maybeSingle();
+        if (dup) { skippedTitles.push(actionTitle); continue; }
+        const meta = await searchAndGetTmdbData(actionTitle);
+        const { error: insertErr } = await supabase.from('movies').insert({
+          user_id: authSess.user.id,
+          title: meta?.displayTitle || actionTitle,
+          status: isWatched ? 'watched' : 'watchlist',
+          watched: isWatched,
+          poster: meta?.poster || null,
+          year: meta?.year || null,
+          genre: meta?.genre || null,
+          tmdb_id: meta?.tmdb_id || null,
+          type: meta?.type || 'Movie',
+          language: meta?.language || 'en',
+        });
+        if (!insertErr) insertedTitles.push(actionTitle);
+      } catch {}
+    }
+    if (insertedTitles.length > 0) {
+      setTimeout(() => onLibraryUpdate?.(), 500);
+      setToast(`✓ Added ${insertedTitles.length} film${insertedTitles.length > 1 ? 's' : ''} to watchlist`);
+      setTimeout(() => setToast(''), 3500);
+    } else if (skippedTitles.length > 0) {
+      setToast(`Already in your library`);
+      setTimeout(() => setToast(''), 3500);
+    }
+  }
+}
       // Fallback: if no action tag, detect intent directly from user message
 if (!actionMatch) {
   const wlMatch = userQuery.match(/(?:add|save)\s+(.+?)\s+(?:to\s+(?:my\s+)?(?:watchlist|library)|for\s+later)/i);
