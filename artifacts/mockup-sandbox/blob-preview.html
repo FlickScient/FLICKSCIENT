@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { background: #0a0a0c; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; font-family: sans-serif; gap: 40px; }
+  .row { display: flex; gap: 40px; align-items: center; }
+  .label { color: #666; font-size: 10px; text-align: center; margin-top: 8px; text-transform: uppercase; letter-spacing: 0.15em; font-weight: 800; }
+  .item { display: flex; flex-direction: column; align-items: center; }
+
+  @keyframes blob-morph {
+    0%   { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+    12%  { border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%; }
+    25%  { border-radius: 50% 60% 30% 40% / 50% 70% 60% 40%; }
+    37%  { border-radius: 40% 70% 60% 50% / 40% 50% 70% 60%; }
+    50%  { border-radius: 70% 30% 50% 60% / 30% 60% 40% 70%; }
+    62%  { border-radius: 40% 60% 70% 30% / 60% 40% 50% 60%; }
+    75%  { border-radius: 60% 50% 40% 70% / 70% 30% 60% 40%; }
+    87%  { border-radius: 30% 70% 50% 60% / 40% 60% 50% 70%; }
+    100% { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+  }
+  @keyframes blob-float {
+    0%, 100% { transform: translateY(0px) scale(1); }
+    33%       { transform: translateY(-6px) scale(1.02); }
+    66%       { transform: translateY(3px) scale(0.98); }
+  }
+  @keyframes glow-pulse { 0%,100%{opacity:.55;transform:scale(1)} 50%{opacity:1;transform:scale(1.2)} }
+
+  .blob-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+  .blob-glow { position: absolute; border-radius: 50%; filter: blur(18px); animation: glow-pulse 2.5s ease-in-out infinite; z-index: 0; }
+  .blob-body { position: relative; z-index: 1; border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; animation: blob-morph 7s ease-in-out infinite, blob-float 4s ease-in-out infinite; will-change: transform, border-radius; }
+
+  /* Default — purple */
+  .blob-default .blob-glow  { width:96px; height:96px; background:rgba(139,0,255,0.5); }
+  .blob-default .blob-body  { width:80px; height:80px; background: radial-gradient(circle at 35% 30%, #8B00FF, #6600cc 45%, #4B0082); box-shadow: 0 0 10px rgba(139,0,255,0.6); }
+
+  /* Horror — deep red */
+  .blob-horror .blob-glow  { width:96px; height:96px; background:rgba(192,57,43,0.6); }
+  .blob-horror .blob-body  { width:80px; height:80px; background: radial-gradient(circle at 35% 30%, #c0392b, #8b0000 45%, #5c0000); box-shadow: 0 0 10px rgba(192,57,43,0.7); }
+
+  /* Romance — pink */
+  .blob-romance .blob-glow { width:96px; height:96px; background:rgba(240,98,146,0.5); }
+  .blob-romance .blob-body { width:80px; height:80px; background: radial-gradient(circle at 35% 30%, #f06292, #c2185b 45%, #880e4f); box-shadow: 0 0 10px rgba(240,98,146,0.6); }
+
+  /* Sci-Fi — cyan */
+  .blob-scifi .blob-glow { width:96px; height:96px; background:rgba(0,229,255,0.5); }
+  .blob-scifi .blob-body { width:80px; height:80px; background: radial-gradient(circle at 35% 30%, #00e5ff, #0097a7 45%, #004d5c); box-shadow: 0 0 10px rgba(0,229,255,0.6); }
+
+  /* Action — orange */
+  .blob-action .blob-glow { width:96px; height:96px; background:rgba(255,109,0,0.55); }
+  .blob-action .blob-body { width:80px; height:80px; background: radial-gradient(circle at 35% 30%, #ff6d00, #bf360c 45%, #7f1700); box-shadow: 0 0 10px rgba(255,109,0,0.65); }
+
+  /* Size 32 (message avatar) */
+  .blob-sm .blob-glow { width:38px; height:38px; filter:blur(8px); }
+  .blob-sm .blob-body { width:32px; height:32px; }
+
+  /* Size 24 (nav icon) */
+  .blob-xs .blob-glow { width:29px; height:29px; filter:blur(6px); }
+  .blob-xs .blob-body { width:24px; height:24px; }
+
+  .section-title { color: #444; font-size: 9px; text-transform: uppercase; letter-spacing: 0.25em; font-weight: 900; width: 100%; padding-left: 20px; margin-bottom: -20px; }
+</style>
+</head>
+<body>
+
+<p class="section-title">Header Blob (size=80) — Mood Ring Demo</p>
+<div class="row">
+  <div class="item">
+    <div class="blob-wrap blob-default"><span class="blob-glow"></span><span class="blob-body"></span></div>
+    <div class="label">Default<br/>Purple</div>
+  </div>
+  <div class="item">
+    <div class="blob-wrap blob-horror"><span class="blob-glow"></span><span class="blob-body"></span></div>
+    <div class="label">Horror<br/>Deep Red</div>
+  </div>
+  <div class="item">
+    <div class="blob-wrap blob-romance"><span class="blob-glow"></span><span class="blob-body"></span></div>
+    <div class="label">Romance<br/>Pink</div>
+  </div>
+  <div class="item">
+    <div class="blob-wrap blob-scifi"><span class="blob-glow"></span><span class="blob-body"></span></div>
+    <div class="label">Sci-Fi<br/>Cyan</div>
+  </div>
+  <div class="item">
+    <div class="blob-wrap blob-action"><span class="blob-glow"></span><span class="blob-body"></span></div>
+    <div class="label">Action<br/>Orange</div>
+  </div>
+</div>
+
+<p class="section-title">Message Avatar (size=32)</p>
+<div class="row">
+  <div class="item">
+    <div class="blob-wrap blob-default blob-sm"><span class="blob-glow"></span><span class="blob-body"></span></div>
+    <div class="label">AI Avatar</div>
+  </div>
+  <div class="item">
+    <div class="blob-wrap blob-horror blob-sm"><span class="blob-glow"></span><span class="blob-body"></span></div>
+    <div class="label">Horror</div>
+  </div>
+  <div class="item">
+    <div class="blob-wrap blob-romance blob-sm"><span class="blob-glow"></span><span class="blob-body"></span></div>
+    <div class="label">Romance</div>
+  </div>
+  <div class="item">
+    <div class="blob-wrap blob-scifi blob-sm"><span class="blob-glow"></span><span class="blob-body"></span></div>
+    <div class="label">Sci-Fi</div>
+  </div>
+</div>
+
+<p class="section-title">Nav Icon (size=24)</p>
+<div class="row" style="background:#111118; padding:16px 24px; border-radius:20px; border:1px solid rgba(255,255,255,0.06)">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:4px;color:#6b7280;font-size:9px;font-weight:900;letter-spacing:.1em;text-transform:uppercase">
+    <div class="blob-wrap blob-default blob-xs"><span class="blob-glow"></span><span class="blob-body"></span></div>
+    AI
+  </div>
+</div>
+
+</body>
+</html>
