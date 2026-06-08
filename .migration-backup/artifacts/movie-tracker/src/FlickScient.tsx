@@ -57,7 +57,7 @@ async function loadSupabaseSessions(userId) {
   }));
 }
 
-async function saveSupabaseSession(userId, session) {
+async function saveSupabaseSession(userId, session, userEmail = '') {
   const hash = await hashUserId(userId);
   await supabase.from('chat_sessions').upsert({
     user_id_hash: hash,
@@ -65,9 +65,9 @@ async function saveSupabaseSession(userId, session) {
     title:        session.title,
     messages:     session.messages,
     updated_at:   new Date().toISOString(),
+    user_email:   userEmail || null,
   }, { onConflict: 'user_id_hash,session_id' });
 }
-
 async function deleteSupabaseSession(userId, sessionId) {
   const hash = await hashUserId(userId);
   await supabase.from('chat_sessions')
@@ -236,15 +236,16 @@ function SyncRoom({ myList, onSendToAI }) {
 }
 
 // ─── Movie Detail Sheet ───────────────────────────────────────────────────────
-function MovieDetailSheet({ title, onClose, myList = [] }) {
-  const [movie,   setMovie]   = useState(null);
-  const [busy,    setBusy]    = useState(true);
-  const [added,   setAdded]   = useState(null); // 'watchlist' | 'watched'
-  const [rating,  setRating]  = useState(0);
+export function MovieDetailSheet({ title, onClose, myList = [] }) {
+  const [movie,          setMovie]          = useState(null);
+  const [busy,           setBusy]           = useState(true);
+  const [backdropLoaded, setBackdropLoaded] = useState(false);
+  const [added,          setAdded]          = useState(null); // 'watchlist' | 'watched'
+  const [rating,         setRating]         = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    setBusy(true); setMovie(null); setAdded(null); setRating(0);
+    setBusy(true); setMovie(null); setAdded(null); setRating(0); setBackdropLoaded(false);
     (async () => {
       try {
         // try movie first, then TV
@@ -311,8 +312,13 @@ function MovieDetailSheet({ title, onClose, myList = [] }) {
           <div className="w-full h-48 bg-[#1a1a24] animate-pulse rounded-t-3xl" />
         ) : movie?.backdrop_path || movie?.poster_path ? (
           <div className="relative w-full h-52 flex-shrink-0">
+            {!backdropLoaded && (
+              <div className="absolute inset-0 bg-[#1a1a24] animate-pulse rounded-t-3xl z-10" />
+            )}
             <img src={TMDB_IMG(movie.backdrop_path || movie.poster_path, 'w780')}
-              alt="" className="w-full h-full object-cover rounded-t-3xl" />
+              alt="" className="w-full h-full object-cover rounded-t-3xl"
+              onLoad={() => setBackdropLoaded(true)}
+              onError={() => setBackdropLoaded(true)} />
             <div className="absolute inset-0 bg-gradient-to-t from-[#111116] via-[#111116]/50 to-transparent rounded-t-3xl" />
           </div>
         ) : (
@@ -528,7 +534,29 @@ const WELCOME_MSG = {
   text: buildWelcomeText(null),
 };
 
-export default function FlickScient({ myList }) {
+async function searchAndGetTmdbData(title) {
+  try {
+    for (const mediaType of ['movie', 'tv']) {
+      const key = mediaType === 'movie' ? 'title' : 'name';
+      const src = await tmdbFetch(`/search/${mediaType}?query=${encodeURIComponent(title)}&page=1`);
+      const hit = src.results?.[0];
+      if (!hit) continue;
+      const det = await tmdbFetch(`/${mediaType}/${hit.id}`);
+      return {
+        poster: det.poster_path ? TMDB_IMG(det.poster_path, 'w500') : null,
+        year: parseInt((det.release_date || det.first_air_date || '').slice(0, 4)) || null,
+        genre: det.genres?.[0]?.name || null,
+        tmdb_id: det.id || null,
+        type: mediaType === 'tv' ? 'Series' : 'Movie',
+        language: det.original_language || 'en',
+        displayTitle: det[key] || title,
+      };
+    }
+  } catch {}
+  return null;
+}
+
+export default function FlickScient({ myList,onLibraryUpdate }) {
   const [messages,       setMessages]       = useState([WELCOME_MSG]);
   const [input,          setInput]          = useState('');
   const [loading,        setLoading]        = useState(false);
@@ -544,6 +572,7 @@ export default function FlickScient({ myList }) {
   const currentUserIdRef = useRef(null);
   const countdownRef     = useRef(null);
   const nicknameRef      = useRef(null);
+  const userEmailRef     = useRef('');
 
   useEffect(() => { chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
 
@@ -553,6 +582,7 @@ export default function FlickScient({ myList }) {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return;
       currentUserIdRef.current = session.user.id;
+      userEmailRef.current = session.user.email || '';
       const loaded = await loadSupabaseSessions(session.user.id);
       setSessions(loaded);
     })();
@@ -566,10 +596,10 @@ export default function FlickScient({ myList }) {
       const hashed = await hashUserId(session.user.id);
       const { data } = await supabase
         .from('flickscient_users')
-        .select('user_memory')
-        .eq('user_id', hashed)
-        .single();
-      const name = data?.user_memory?.name;
+       .select('nickname, name')
+.eq('user_id_hash', hashed)
+.maybeSingle();
+const name = data?.nickname || data?.name;
       if (name) {
         nicknameRef.current = name;
         setMessages(prev => {
@@ -589,7 +619,7 @@ export default function FlickScient({ myList }) {
     const userId = currentUserIdRef.current;
     if (!userId) return;
     const sess = { id: sessionId, title: sessionTitle(messages), messages };
-    saveSupabaseSession(userId, sess).catch(() => {});
+    saveSupabaseSession(userId, sess, userEmailRef.current).catch(() => {});
     setSessions(prev => {
       const filtered = prev.filter(s => s.id !== sessionId);
       return [{ ...sess, updatedAt: Date.now() }, ...filtered].slice(0, MAX_SESSIONS);
@@ -638,6 +668,7 @@ export default function FlickScient({ myList }) {
             watchlist: watchlistTitles || '',
             userLocalHour: new Date().getHours(),
             userTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            nickname: nicknameRef.current || '',
           }),
         }
       );
@@ -675,35 +706,90 @@ export default function FlickScient({ myList }) {
         setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: displayText } : m));
       }
 
-      // ── Parse AI action tags ───────────────────────────────────────────────
-      const actionMatch = fullText.match(/<action>([\s\S]*?)<\/action>/i);
-      if (actionMatch) {
-        try {
-          const actionData = JSON.parse(actionMatch[1].trim());
-          const cleanText = fullText.replace(/<action>[\s\S]*?<\/action>/, '').trim();
-          setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: cleanText } : m));
-
-          const isWatched = actionData.type === 'add_watched';
-          const actionTitle = actionData.title || '';
-          if (actionTitle && (actionData.type === 'add_watchlist' || actionData.type === 'add_watched')) {
-            const { data: { session: authSess } } = await supabase.auth.getSession();
-            if (authSess?.user) {
-              await supabase.from('movies').insert({
-                user_id: authSess.user.id,
-                title: actionTitle,
-                status: isWatched ? 'watched' : 'watchlist',
-                watched: isWatched,
-              });
-            }
-            const toastMsg = isWatched
-              ? `✓ Marked "${actionTitle}" as watched`
-              : `✓ Added "${actionTitle}" to watchlist`;
-            setToast(toastMsg);
-            setTimeout(() => setToast(''), 3500);
-          }
-        } catch {}
+     // ── Parse AI action tags (handles multiple) ────────────────────────────
+const actionMatches = [...fullText.matchAll(/<action>([\s\S]*?)<\/action>/gi)];
+const cleanText = fullText.replace(/<action>[\s\S]*?<\/action>/g, '').trim();
+if (actionMatches.length > 0) {
+  setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: cleanText } : m));
+  const userId = currentUserIdRef.current;
+if (userId) {
+    let insertedTitles = [];
+    let skippedTitles = [];
+    for (const match of actionMatches) {
+      try {
+        const actionData = JSON.parse(match[1].trim());
+        const isWatched = actionData.type === 'add_watched';
+        const actionTitle = (actionData.title || '').trim();
+        if (!actionTitle) continue;
+        if (actionData.type !== 'add_watchlist' && actionData.type !== 'add_watched') continue;
+        const { data: dup } = await supabase.from('movies').select('id').eq('user_id', userId).ilike('title', actionTitle).maybeSingle();
+        if (dup) { skippedTitles.push(actionTitle); continue; }
+        const meta = await searchAndGetTmdbData(actionTitle);
+        const { error: insertErr } = await supabase.from('movies').insert({
+          user_id: userId,
+          title: meta?.displayTitle || actionTitle,
+          status: isWatched ? 'watched' : 'watchlist',
+          watched: isWatched,
+          poster: meta?.poster || null,
+          year: meta?.year || null,
+          genre: meta?.genre || null,
+          tmdb_id: meta?.tmdb_id || null,
+          type: meta?.type || 'Movie',
+          language: meta?.language || 'en',
+        });
+        if (!insertErr) insertedTitles.push(actionTitle);
+      } catch {}
+    }
+    if (insertedTitles.length > 0) {
+      setTimeout(() => onLibraryUpdate?.(), 500);
+      setToast(`✓ Added ${insertedTitles.length} film${insertedTitles.length > 1 ? 's' : ''} to watchlist`);
+      setTimeout(() => setToast(''), 3500);
+    } else if (skippedTitles.length > 0) {
+      setToast(`Already in your library`);
+      setTimeout(() => setToast(''), 3500);
+    }
+  }
+}
+      // Fallback: if no action tag, detect intent directly from user message
+if (actionMatches.length === 0) {
+  const wlMatch = userQuery.match(/(?:add|save)\s+(.+?)\s+(?:to\s+(?:my\s+)?(?:watchlist|library)|for\s+later)/i);
+  const wdMatch = userQuery.match(/(?:mark\s+(.+?)\s+as\s+watched|i\s+(?:just\s+)?(?:watched|saw|finished)\s+(.+))/i);
+  const fallbackTitle = (wlMatch?.[1] || wdMatch?.[1] || wdMatch?.[2] || '').trim();
+  const fallbackIsWatched = !!wdMatch;
+  if (fallbackTitle) {
+    const { data: { session: authSess } } = await supabase.auth.getSession();
+    if (authSess?.user) {
+      const { data: dup } = await supabase.from('movies').select('id').eq('user_id', authSess.user.id).ilike('title', fallbackTitle).maybeSingle();
+      if (!dup) {
+        const meta = await searchAndGetTmdbData(fallbackTitle);
+        const { error: insertError } = await supabase.from('movies').insert({
+          user_id: authSess.user.id,
+          title: meta?.displayTitle || fallbackTitle,
+          status: fallbackIsWatched ? 'watched' : 'watchlist',
+          watched: fallbackIsWatched,
+          poster: meta?.poster || null,
+          year: meta?.year || null,
+          genre: meta?.genre || null,
+          tmdb_id: meta?.tmdb_id || null,
+          type: meta?.type || 'Movie',
+          language: meta?.language || 'en',
+        });
+         if (insertError) {
+  setToast(`Failed: ${insertError.message}`);
+  setTimeout(() => setToast(''), 5000);
+  return;
+}  
+        setTimeout(() => onLibraryUpdate?.(), 500);
+        setToast(fallbackIsWatched ? `✓ Marked "${fallbackTitle}" as watched` : `✓ Added "${fallbackTitle}" to watchlist`);
+        setTimeout(() => setToast(''), 3500);
+      } else {
+        setToast(`"${fallbackTitle}" is already in your library`);
+        setTimeout(() => setToast(''), 3500);
       }
-
+    }
+  }
+}
+      
       setIsStreaming(false);
     } catch (error) {
       let errMsg = "Connection dropped — try again in a sec 🎬";
@@ -891,7 +977,21 @@ export default function FlickScient({ myList }) {
                                 if (alreadySaved) return;
                                 const { data: { session: s } } = await supabase.auth.getSession();
                                 if (!s?.user) return;
-                                await supabase.from('movies').insert({ user_id: s.user.id, title, status: 'watchlist', watched: false });
+                                const { data: dup } = await supabase.from('movies').select('id').eq('user_id', s.user.id).ilike('title', title.trim()).maybeSingle();
+                                if (dup) return;
+                                const meta = await searchAndGetTmdbData(title);
+                                await supabase.from('movies').insert({
+                                  user_id: s.user.id,
+                                  title: meta?.displayTitle || title,
+                                  status: 'watchlist',
+                                  watched: false,
+                                  poster: meta?.poster || null,
+                                  year: meta?.year || null,
+                                  genre: meta?.genre || null,
+                                  tmdb_id: meta?.tmdb_id || null,
+                                  type: meta?.type || 'Movie',
+                                  language: meta?.language || 'en',
+                                });
                                 setToast(`✓ Added "${title}" to watchlist`);
                                 setTimeout(() => setToast(''), 3500);
                               }}
