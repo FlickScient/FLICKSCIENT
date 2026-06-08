@@ -10,6 +10,7 @@ import {
   Sun, Moon, Eye, EyeOff, MessageSquare, Send,
 } from 'lucide-react';
 import FlickScient, { MovieDetailSheet } from './FlickScient';
+import BlobIcon from './components/BlobIcon';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const TMDB_TOKEN = import.meta.env.VITE_TMDB_TOKEN as string;
@@ -2041,7 +2042,7 @@ function BottomNav({ view, setView }) {
               ? 'text-purple-400'
               : 'text-gray-600 hover:text-purple-400'
           }`}>
-          <Sparkles size={20} strokeWidth={view==='flickscient'?2.5:1.5} />
+          <BlobIcon size={24} />
           <span className="text-[9px] font-black uppercase tracking-wider">AI</span>
         </button>
 

@@ -2,6 +2,29 @@
 import { supabase } from './lib/supabase';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Sparkles, User, Clapperboard, Link, Copy, Check, Users, ArrowLeft, Clock, Trash2, Plus, X, Star, Bookmark, Eye } from 'lucide-react';
+import BlobIcon, { BlobMood } from './components/BlobIcon';
+
+function detectMoodFromText(text: string): BlobMood {
+  const t = text.toLowerCase();
+  if (/horror|slasher|scary|terrif|nightmare|haunted|demon|possessed|dread|creep|ghoul|zombie|possessed|supernatural evil/.test(t)) return 'horror';
+  if (/romanc|love story|heartbreak|sweetheart|falling in love|crush|date|relationship|marriage|wedding/.test(t)) return 'romance';
+  if (/sci.?fi|science fiction|space|alien|robot|cyberpunk|dystopia|futuristic|galaxy|extraterrestrial|android|artificial intelligence/.test(t)) return 'scifi';
+  if (/action|explosion|fight|combat|adrenaline|chase scene|shoot.?out|stunt|high.octane/.test(t)) return 'action';
+  if (/comedy|funny|hilarious|laugh|humor|comic|absurd|quirky|witty|slapstick|parody/.test(t)) return 'comedy';
+  if (/drama|emotional|heart.?wrench|devastating|powerful drama|moving|tearjerker|sobbing|grief|loss/.test(t)) return 'drama';
+  if (/fantasy|magic|wizard|dragon|mythical|enchanted|fairy tale|sorcery|realm|quest/.test(t)) return 'fantasy';
+  if (/thriller|suspense|tense|psychological|mind.?bend|twist ending|paranoia|menacing/.test(t)) return 'thriller';
+  if (/animat|anime|animated|cartoon|pixar|studio ghibli|miyazaki/.test(t)) return 'animation';
+  if (/documentary|real life|based on true|nonfiction|journalism|investigat/.test(t)) return 'documentary';
+  if (/mystery|detective|whodunit|clue|investigation|unsolved|enigma/.test(t)) return 'mystery';
+  if (/western|cowboy|frontier|wild west|outlaw|saloon|gunslinger/.test(t)) return 'western';
+  if (/world war|military|soldier|battlefield|wwii|ww2|ww1|wwi|veteran|wartime/.test(t)) return 'war';
+  if (/music|band|musician|concert|rockstar|jazz|hip.?hop|singer|soundtrack|biopic.*music/.test(t)) return 'music';
+  if (/adventure|expedition|journey|quest|exploration|treasure|survival/.test(t)) return 'adventure';
+  if (/crime|gangster|heist|mob|mafia|criminal|noir|drug cartel|underworld/.test(t)) return 'crime';
+  if (/histor|period piece|ancient|medieval|empire|century|civil war|revolution|era/.test(t)) return 'history';
+  return 'default';
+}
 
 // ─── TMDB helpers ─────────────────────────────────────────────────────────────
 const TMDB_TOKEN = import.meta.env.VITE_TMDB_TOKEN as string;
@@ -561,6 +584,7 @@ export default function FlickScient({ myList,onLibraryUpdate }) {
   const [input,          setInput]          = useState('');
   const [loading,        setLoading]        = useState(false);
   const [isStreaming,    setIsStreaming]     = useState(false);
+  const [currentMood,    setCurrentMood]    = useState<BlobMood>('default');
   const [aiTab,          setAiTab]          = useState('chat');
   const [toast,          setToast]          = useState('');
   const [sessionId,      setSessionId]      = useState(() => crypto.randomUUID());
@@ -790,6 +814,7 @@ if (actionMatches.length === 0) {
   }
 }
       
+      setCurrentMood(detectMoodFromText(fullText));
       setIsStreaming(false);
     } catch (error) {
       let errMsg = "Connection dropped — try again in a sec 🎬";
