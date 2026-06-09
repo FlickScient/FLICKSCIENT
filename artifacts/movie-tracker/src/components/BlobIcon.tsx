@@ -1,7 +1,5 @@
 // @ts-nocheck
-import React, { useState, useMemo, useEffect } from 'react';
-// The reference 3D-rendered silk blob image — exactly what the user wants
-import blobSrc from '@assets/file_0000000015d47208b8783183028c4c07_1780952971978.png';
+import React, { useRef, useEffect } from 'react';
 
 export type BlobMood =
   | 'default' | 'horror' | 'romance' | 'scifi' | 'action' | 'comedy'
@@ -19,166 +17,246 @@ interface BlobIconProps {
   onVanished?: () => void;
 }
 
-// CSS hue-rotate offset for each mood (source image is purple ~280°)
-// formula: target_hue – 280 = rotation
-const MOOD_FILTER: Record<string, string> = {
-  default:     'hue-rotate(0deg)   saturate(1.05)',
-  horror:      'hue-rotate(80deg)  saturate(1.3)  brightness(0.85)',
-  romance:     'hue-rotate(50deg)  saturate(1.25)',
-  scifi:       'hue-rotate(-100deg) saturate(1.3)  brightness(1.1)',
-  action:      'hue-rotate(110deg) saturate(1.4)  brightness(0.9)',
-  comedy:      'hue-rotate(140deg) saturate(1.3)',
-  drama:       'hue-rotate(-60deg) saturate(1.1)  brightness(0.9)',
-  fantasy:     'hue-rotate(20deg)  saturate(1.2)',
-  thriller:    'hue-rotate(-80deg) saturate(0.65) brightness(0.75)',
-  animation:   'hue-rotate(60deg)  saturate(1.4)',
-  documentary: 'hue-rotate(-120deg) saturate(0.9)',
-  mystery:     'hue-rotate(-90deg) saturate(0.8)',
-  western:     'hue-rotate(115deg) saturate(1.2)  brightness(0.88)',
-  war:         'hue-rotate(-150deg) saturate(0.25) brightness(0.7)',
-  music:       'hue-rotate(30deg)  saturate(1.3)',
-  adventure:   'hue-rotate(-125deg) saturate(1.1)',
-  crime:       'hue-rotate(100deg) saturate(1.2)  brightness(0.85)',
-  history:     'hue-rotate(110deg) saturate(0.75) brightness(0.85)',
+// Each mood: rgb for glow math + gradient stops for fold lighting
+const MOODS: Record<string, {
+  gr: number; gg: number; gb: number;   // glow RGB
+  stops: string[];                       // base radial gradient 5 stops
+  hi: string[];                          // fold highlight rgba colors
+}> = {
+  default:  { gr:136, gg:0,   gb:220,
+    stops:['#FF55FF','#CC00CC','#8800BB','#340060','#080018'],
+    hi:['rgba(255,140,255,.74)','rgba(220,60,255,.58)','rgba(160,20,220,.62)','rgba(180,0,220,.52)'] },
+  horror:   { gr:200, gg:0,   gb:0,
+    stops:['#FF5533','#CC0000','#880000','#300000','#080000'],
+    hi:['rgba(255,140,100,.74)','rgba(220,30,0,.58)','rgba(160,0,0,.62)','rgba(180,0,0,.52)'] },
+  romance:  { gr:220, gg:0,   gb:100,
+    stops:['#FF88CC','#FF1493','#990055','#330018','#080005'],
+    hi:['rgba(255,160,220,.74)','rgba(220,30,120,.58)','rgba(160,0,80,.62)','rgba(180,0,100,.52)'] },
+  scifi:    { gr:0,   gg:170, gb:220,
+    stops:['#44FFFF','#00AADD','#006699','#002233','#000608'],
+    hi:['rgba(100,255,255,.74)','rgba(0,200,240,.58)','rgba(0,130,180,.62)','rgba(0,150,200,.52)'] },
+  action:   { gr:220, gg:80,  gb:0,
+    stops:['#FFAA44','#FF5500','#882200','#280A00','#060200'],
+    hi:['rgba(255,180,80,.74)','rgba(220,100,0,.58)','rgba(160,50,0,.62)','rgba(180,60,0,.52)'] },
+  comedy:   { gr:220, gg:170, gb:0,
+    stops:['#FFEE55','#FFBB00','#886600','#282000','#060500'],
+    hi:['rgba(255,240,120,.74)','rgba(220,190,0,.58)','rgba(160,130,0,.62)','rgba(180,140,0,.52)'] },
+  drama:    { gr:50,  gg:100, gb:200,
+    stops:['#6699FF','#1155CC','#103377','#001028','#000308'],
+    hi:['rgba(120,160,255,.74)','rgba(50,100,220,.58)','rgba(20,60,160,.62)','rgba(30,70,180,.52)'] },
+  fantasy:  { gr:130, gg:40,  gb:200,
+    stops:['#DD99FF','#9933CC','#551188','#180028','#050008'],
+    hi:['rgba(220,160,255,.74)','rgba(180,60,240,.58)','rgba(120,20,180,.62)','rgba(140,0,200,.52)'] },
+  thriller: { gr:50,  gg:80,  gb:120,
+    stops:['#7799BB','#334466','#1A2233','#090D11','#020305'],
+    hi:['rgba(130,160,200,.74)','rgba(70,100,150,.58)','rgba(40,60,100,.62)','rgba(50,70,110,.52)'] },
+  animation:{ gr:220, gg:40,  gb:130,
+    stops:['#FF99EE','#FF44AA','#881155','#280018','#060005'],
+    hi:['rgba(255,160,240,.74)','rgba(220,60,170,.58)','rgba(160,20,110,.62)','rgba(180,0,130,.52)'] },
+  documentary:{gr:30, gg:150, gb:70,
+    stops:['#77DDAA','#22AA55','#116633','#042218','#010805'],
+    hi:['rgba(120,220,170,.74)','rgba(40,180,90,.58)','rgba(10,130,60,.62)','rgba(20,150,70,.52)'] },
+  mystery:  { gr:60,  gg:100, gb:150,
+    stops:['#99BBDD','#446688','#223344','#091218','#020405'],
+    hi:['rgba(150,190,220,.74)','rgba(80,120,180,.58)','rgba(40,80,130,.62)','rgba(50,90,150,.52)'] },
+  western:  { gr:160, gg:120, gb:0,
+    stops:['#DDBB44','#AA8800','#665500','#221A00','#060400'],
+    hi:['rgba(220,190,80,.74)','rgba(180,150,0,.58)','rgba(130,100,0,.62)','rgba(150,110,0,.52)'] },
+  war:      { gr:60,  gg:80,  gb:100,
+    stops:['#99AABB','#445566','#222D33','#090D10','#020303'],
+    hi:['rgba(150,170,190,.74)','rgba(80,110,140,.58)','rgba(50,70,90,.62)','rgba(60,80,100,.52)'] },
+  music:    { gr:100, gg:20,  gb:200,
+    stops:['#CC88FF','#7722CC','#440088','#160028','#050008'],
+    hi:['rgba(200,150,255,.74)','rgba(150,50,230,.58)','rgba(100,10,170,.62)','rgba(120,0,190,.52)'] },
+  adventure:{ gr:30,  gg:150, gb:110,
+    stops:['#55DDBB','#22AA77','#116644','#042218','#010806'],
+    hi:['rgba(100,220,190,.74)','rgba(40,180,130,.58)','rgba(10,130,90,.62)','rgba(20,150,100,.52)'] },
+  crime:    { gr:160, gg:70,  gb:0,
+    stops:['#DDAA55','#AA5500','#662200','#200A00','#060200'],
+    hi:['rgba(220,170,80,.74)','rgba(180,100,0,.58)','rgba(130,50,0,.62)','rgba(150,60,0,.52)'] },
+  history:  { gr:150, gg:110, gb:40,
+    stops:['#DDBB88','#AA8844','#664422','#200E08','#060300'],
+    hi:['rgba(220,190,140,.74)','rgba(180,150,70,.58)','rgba(130,90,30,.62)','rgba(150,100,40,.52)'] },
 };
 
-const MOOD_GLOW: Record<string, string> = {
-  default: '#8800CC', horror: '#CC0000', romance: '#FF1493', scifi: '#00CCFF',
-  action: '#FF6600', comedy: '#FFD700', drama: '#3355FF', fantasy: '#AA44FF',
-  thriller: '#445577', animation: '#FF44AA', documentary: '#33AA55',
-  mystery: '#4477AA', western: '#AA8800', war: '#556677', music: '#7733FF',
-  adventure: '#22AA77', crime: '#993300', history: '#AA8855',
-};
-
-// ── 12-point organic blob polygons (computed from irregular radii at 30° intervals) ──
-// All shapes have the same 12 vertices so CSS can smoothly interpolate between them.
-const P: string[] = [
-  '50% 8%,  73% 10%, 88% 28%, 98% 50%, 86% 71%, 73% 89%, 50% 93%, 27% 91%, 15% 71%,  4% 50%, 12% 28%, 28% 11%',
-  '50% 4%,  71% 14%, 91% 27%, 93% 50%, 92% 74%, 71% 86%, 50% 96%, 29% 86%,  8% 74%,  7% 50%, 10% 27%, 29% 14%',
-  '50% 6%,  74%  8%, 86% 30%, 97% 50%, 88% 72%, 74% 92%, 50% 91%, 27% 90%, 12% 72%,  3% 50%, 14% 29%, 27%  9%',
-  '50% 3%,  72% 13%, 92% 26%, 92% 50%, 89% 73%, 72% 88%, 50% 98%, 29% 87%, 10% 73%,  6% 50%,  8% 26%, 29% 13%',
-  '50% 7%,  74%  9%, 87% 29%, 98% 50%, 86% 71%, 73% 90%, 50% 94%, 26% 92%, 14% 71%,  4% 50%, 11% 28%, 27% 10%',
-  '50% 5%,  72% 12%, 90% 27%, 94% 50%, 91% 74%, 71% 86%, 50% 97%, 28% 88%, 13% 72%,  3% 50%, 13% 29%, 27%  9%',
-  '50% 2%,  71% 15%, 89% 28%, 96% 50%, 87% 72%, 74% 91%, 50% 92%, 28% 89%,  9% 74%,  8% 50%,  9% 27%, 28% 12%',
-  '50% 9%,  73% 10%, 92% 26%, 93% 50%, 90% 73%, 72% 87%, 50% 98%, 30% 86%, 11% 73%,  5% 50%, 12% 28%, 27% 10%',
-  '50% 5%,  75% 11%, 89% 32%, 95% 50%, 84% 70%, 70% 91%, 50% 95%, 30% 93%, 16% 72%,  6% 50%, 13% 26%, 26%  8%',
-  '50% 7%,  70%  9%, 90% 25%, 97% 50%, 88% 74%, 74% 93%, 52% 96%, 28% 90%, 10% 70%,  4% 50%, 11% 30%, 30% 12%',
-];
-
-let _styleInjected = false;
-function ensureStyles() {
-  if (_styleInjected || typeof document === 'undefined') return;
-  _styleInjected = true;
+let _stylesInjected = false;
+function injectStyles() {
+  if (_stylesInjected || typeof document === 'undefined') return;
+  _stylesInjected = true;
   const el = document.createElement('style');
   el.textContent = `
-@keyframes blobFloat {
-  0%,100% { transform:translateY(0px) rotate(0deg); }
-  40% { transform:translateY(-5px) rotate(0.7deg); }
-  70% { transform:translateY(3px) rotate(-0.5deg); }
+@keyframes blobErrWrap{
+  0%{transform:scale(1);opacity:1;filter:blur(0px)}
+  20%{transform:scale(1.5);opacity:.85;filter:blur(1px)}
+  40%{transform:scale(2.8);opacity:.55;filter:saturate(4) blur(5px)}
+  58%{transform:scale(4);opacity:.2;filter:saturate(6) blur(18px)}
+  72%{transform:scale(.1);opacity:.05;filter:blur(10px)}
+  86%{transform:scale(1.08);opacity:.72;filter:blur(0px)}
+  100%{transform:scale(1);opacity:1;filter:blur(0px)}
 }
-@keyframes blobFloatFast {
-  0%,100% { transform:translateY(0px) rotate(0deg) scale(1); }
-  25% { transform:translateY(-7px) rotate(2deg) scale(1.04); }
-  50% { transform:translateY(4px) rotate(-1.5deg) scale(0.96); }
-  75% { transform:translateY(-4px) rotate(1deg) scale(1.02); }
-}
-@keyframes blobGlow {
-  0%,100% { opacity:0.28; transform:scale(1); }
-  50% { opacity:0.52; transform:scale(1.1); }
-}
-@keyframes blobGlowFast {
-  0%,100% { opacity:0.4; transform:scale(1); }
-  50% { opacity:0.85; transform:scale(1.28); }
-}
-@keyframes blobMorph {
-  0%   { clip-path:polygon(${P[0]}) }
-  11%  { clip-path:polygon(${P[1]}) }
-  22%  { clip-path:polygon(${P[2]}) }
-  33%  { clip-path:polygon(${P[3]}) }
-  44%  { clip-path:polygon(${P[4]}) }
-  55%  { clip-path:polygon(${P[5]}) }
-  66%  { clip-path:polygon(${P[6]}) }
-  77%  { clip-path:polygon(${P[7]}) }
-  88%  { clip-path:polygon(${P[8]}) }
-  100% { clip-path:polygon(${P[0]}) }
-}
-@keyframes blobMorphFast {
-  0%   { clip-path:polygon(${P[0]}) }
-  10%  { clip-path:polygon(${P[2]}) }
-  20%  { clip-path:polygon(${P[5]}) }
-  30%  { clip-path:polygon(${P[7]}) }
-  40%  { clip-path:polygon(${P[1]}) }
-  50%  { clip-path:polygon(${P[4]}) }
-  60%  { clip-path:polygon(${P[9]}) }
-  70%  { clip-path:polygon(${P[3]}) }
-  80%  { clip-path:polygon(${P[6]}) }
-  90%  { clip-path:polygon(${P[8]}) }
-  100% { clip-path:polygon(${P[0]}) }
-}
-@keyframes blobError {
-  0%   { transform:scale(1);    opacity:1;   filter:saturate(1) blur(0px);  }
-  12%  { transform:scale(1.4);  opacity:0.9; filter:saturate(3) blur(0px);  }
-  28%  { transform:scale(2.3);  opacity:0.8; filter:saturate(5) blur(4px);  }
-  48%  { transform:scale(3.5);  opacity:0.4; filter:saturate(6) blur(16px); }
-  65%  { transform:scale(0.2);  opacity:0.1; filter:saturate(0) blur(9px);  }
-  82%  { transform:scale(1.1);  opacity:0.7; filter:saturate(1) blur(0px);  }
-  100% { transform:scale(1);    opacity:1;   filter:saturate(1) blur(0px);  }
-}
-@keyframes blobVanish {
-  0%   { transform:scale(1);   opacity:1;    }
-  25%  { transform:scale(1.3); opacity:0.95; }
-  55%  { transform:scale(1.1); opacity:0.5;  }
-  80%  { transform:scale(0.4); opacity:0.15; }
-  100% { transform:scale(0);   opacity:0;    }
+@keyframes blobVanishWrap{
+  0%{transform:scale(1);opacity:1}
+  28%{transform:scale(1.28);opacity:.95}
+  62%{transform:scale(.85);opacity:.4}
+  100%{transform:scale(0);opacity:0}
 }
 `;
   document.head.appendChild(el);
 }
 
+function rgba(r: number, g: number, b: number, a: number) {
+  return `rgba(${r},${g},${b},${a.toFixed(3)})`;
+}
+
 export default function BlobIcon({
-  size = 40,
-  animate = true,
-  pulse = false,
-  mood = 'default',
-  state = 'idle',
-  onVanished,
+  size = 40, animate = true, pulse = false,
+  mood = 'default', state = 'idle', onVanished,
 }: BlobIconProps) {
-  useMemo(() => ensureStyles(), []);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef    = useRef<number>(0);
+  const propsRef  = useRef({ pulse, mood, animate });
+  propsRef.current = { pulse, mood, animate };
+
+  injectStyles();
 
   useEffect(() => {
     if (state !== 'complete' || !onVanished) return;
-    const t = setTimeout(onVanished, 720);
+    const t = setTimeout(onVanished, 700);
     return () => clearTimeout(t);
   }, [state, onVanished]);
 
-  const isGenerating = pulse || state === 'generating';
-  const isError      = state === 'error';
-  const isComplete   = state === 'complete';
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width  = size * dpr;
+    canvas.height = size * dpr;
+    canvas.style.width  = `${size}px`;
+    canvas.style.height = `${size}px`;
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(dpr, dpr);
 
-  // Outer wrapper handles: float + state (error/vanish) animations
-  const wrapperAnim =
-    isError    ? 'blobError 1.3s cubic-bezier(0.4,0,0.2,1) forwards'
-    : isComplete ? 'blobVanish 0.72s ease-in forwards'
-    : animate    ? `${isGenerating ? 'blobFloatFast 2.2s' : 'blobFloat 5.5s'} ease-in-out infinite`
+    const W = size, H = size, cx = W / 2, cy = H / 2;
+    let startTs: number | null = null;
+
+    const frame = (ts: number) => {
+      if (startTs === null) startTs = ts;
+      const sec = (ts - startTs) * 0.001;
+      const { pulse: p, mood: m } = propsRef.current;
+      const pal = MOODS[m] || MOODS.default;
+      const spd = p ? 2.4 : 1.0;
+      const t   = sec * spd;
+
+      ctx.clearRect(0, 0, W, H);
+
+      // ── OUTER GLOW ──
+      const glowPulse = 0.30 + 0.16 * Math.sin(sec * (p ? 4.5 : 1.8));
+      const glowR = W * (p ? 0.60 : 0.50);
+      const gg = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
+      gg.addColorStop(0,    rgba(pal.gr, pal.gg, pal.gb, glowPulse * 1.4));
+      gg.addColorStop(0.45, rgba(pal.gr, pal.gg, pal.gb, glowPulse));
+      gg.addColorStop(1,    rgba(pal.gr, pal.gg, pal.gb, 0));
+      ctx.fillStyle = gg;
+      ctx.fillRect(0, 0, W, H);
+
+      // ── BLOB SHAPE (20 control points, 6 harmonics each) ──
+      const N = 20;
+      const baseR = W * 0.38;
+      const pts: { x: number; y: number }[] = [];
+      for (let i = 0; i < N; i++) {
+        const a = (i / N) * Math.PI * 2 - Math.PI * 0.5;
+        const r = baseR * (1
+          + 0.155 * Math.sin(t * 0.63 + a * 2.1  + 0.30)
+          + 0.105 * Math.sin(t * 1.27 + a * 3.7  + 1.10)
+          + 0.075 * Math.sin(t * 0.44 + a * 1.8  + 2.20)
+          + 0.055 * Math.cos(t * 1.83 + a * 4.5  + 0.80)
+          + 0.040 * Math.sin(t * 0.27 + a * 5.3  + 1.50)
+          + 0.030 * Math.cos(t * 2.35 + a * 6.2  + 2.70)
+        );
+        pts.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
+      }
+
+      // Smooth closed curve through midpoints (Catmull–Rom approximation)
+      ctx.beginPath();
+      const m0x = (pts[N - 1].x + pts[0].x) / 2;
+      const m0y = (pts[N - 1].y + pts[0].y) / 2;
+      ctx.moveTo(m0x, m0y);
+      for (let i = 0; i < N; i++) {
+        const p0 = pts[i];
+        const p1 = pts[(i + 1) % N];
+        ctx.quadraticCurveTo(p0.x, p0.y, (p0.x + p1.x) / 2, (p0.y + p1.y) / 2);
+      }
+      ctx.closePath();
+
+      // Clip everything that follows to the blob shape
+      ctx.save();
+      ctx.clip();
+
+      // ── HELPER: paint a radial gradient patch (blended over entire clip area) ──
+      const patch = (px: number, py: number, r: number, color: string, alpha = 1.0) => {
+        const g = ctx.createRadialGradient(px, py, 0, px, py, r);
+        g.addColorStop(0, color);
+        g.addColorStop(1, 'transparent');
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, H);
+        ctx.globalAlpha = 1;
+      };
+
+      // ── BASE GRADIENT ──
+      // Focus point slowly drifts (simulates light source shift over silk)
+      const bx = cx + W * 0.10 * Math.sin(t * 0.28);
+      const by = cy - H * 0.08 * Math.cos(t * 0.35);
+      const bg = ctx.createRadialGradient(bx, by - H * 0.13, W * 0.01, cx, cy, W * 0.54);
+      bg.addColorStop(0,    pal.stops[0]);
+      bg.addColorStop(0.26, pal.stops[1]);
+      bg.addColorStop(0.54, pal.stops[2]);
+      bg.addColorStop(0.80, pal.stops[3]);
+      bg.addColorStop(1,    pal.stops[4]);
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+      // ── FOLD HIGHLIGHTS (4 animated bright patches = lit silk folds) ──
+      patch(cx+W*.18+W*.04*Math.sin(t*.50+0.0), cy-H*.17+H*.03*Math.cos(t*.42+0.0), W*.33, pal.hi[0]);
+      patch(cx-W*.06+W*.05*Math.sin(t*.60+1.1), cy-H*.21+H*.04*Math.cos(t*.70+0.5), W*.25, pal.hi[1]);
+      patch(cx-W*.20+W*.05*Math.sin(t*.45+2.2), cy+H*.03+H*.03*Math.sin(t*.52+1.2), W*.25, pal.hi[2]);
+      patch(cx+W*.17+W*.03*Math.sin(t*.55+3.3), cy+H*.20+H*.04*Math.sin(t*.48+2.1), W*.23, pal.hi[3]);
+
+      // ── SHADOW VALLEYS (dark creases between folds) ──
+      patch(cx-W*.20, cy+H*.22+H*.03*Math.sin(t*.50+4.0), W*.34, 'rgba(0,0,0,.76)');
+      patch(cx+W*.04, cy+H*.07+H*.02*Math.cos(t*.58+1.0), W*.19, 'rgba(0,0,0,.62)');
+      patch(cx-W*.17, cy-H*.16+H*.03*Math.cos(t*.42+1.5), W*.23, 'rgba(0,0,0,.50)');
+      patch(cx+W*.11, cy-H*.04+H*.02*Math.sin(t*.65+2.5), W*.13, 'rgba(0,0,0,.38)');
+
+      // ── EDGE VIGNETTE (darkens the blob rim → makes it look round and 3D) ──
+      const vg = ctx.createRadialGradient(cx, cy, W * 0.24, cx, cy, W * 0.54);
+      vg.addColorStop(0,   'transparent');
+      vg.addColorStop(0.65,'transparent');
+      vg.addColorStop(1,   'rgba(0,0,0,.92)');
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, W, H);
+
+      // ── SPECULAR HIGHLIGHTS (shiny silk sheen) ──
+      patch(cx+W*.17+W*.02*Math.sin(t*.33), cy-H*.19+H*.02*Math.cos(t*.38), W*.095, 'rgba(255,255,255,.90)');
+      patch(cx+W*.24+W*.01*Math.sin(t*.45), cy-H*.03+H*.01*Math.cos(t*.50), W*.065, 'rgba(255,255,255,.58)');
+
+      // Silver fold-edge accents (thin bright slivers where folds meet)
+      patch(cx-W*.10+W*.02*Math.sin(t*.40), cy+H*.26, W*.075, 'rgba(200,170,255,.60)', 0.7);
+      patch(cx+W*.26, cy+H*.13+H*.02*Math.sin(t*.44), W*.055, 'rgba(200,180,255,.55)', 0.6);
+
+      ctx.restore();
+
+      rafRef.current = requestAnimationFrame(frame);
+    };
+
+    rafRef.current = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [size]);
+
+  const wrapAnim =
+    state === 'error'    ? 'blobErrWrap 1.35s cubic-bezier(.4,0,.2,1) forwards'
+    : state === 'complete' ? 'blobVanishWrap .72s ease-in forwards'
     : 'none';
-
-  // Glow animation
-  const glowAnim = animate
-    ? `${isGenerating ? 'blobGlowFast 1.2s' : 'blobGlow 3.5s'} ease-in-out infinite`
-    : 'none';
-
-  // Clip-path morph animation (separate from float so both can play together)
-  const morphAnim = animate
-    ? `${isGenerating ? 'blobMorphFast 3s' : 'blobMorph 10s'} ease-in-out infinite`
-    : 'none';
-
-  // Mood: hue-rotate shifts the purple image to target color
-  const moodFilter  = MOOD_FILTER[mood] ?? MOOD_FILTER.default;
-  const glowColor   = MOOD_GLOW[mood]   ?? MOOD_GLOW.default;
-  const brightBoost = isGenerating ? ' brightness(1.18)' : '';
-
-  const glowSize = size * 1.4;
-  const glowBlur = size * 0.5;
 
   return (
     <span
@@ -190,63 +268,11 @@ export default function BlobIcon({
         width: size,
         height: size,
         flexShrink: 0,
-        animation: wrapperAnim,
-        willChange: 'transform, opacity',
+        animation: wrapAnim,
+        willChange: 'transform, opacity, filter',
       }}
     >
-      {/* Soft ambient glow behind the blob */}
-      <span
-        style={{
-          position: 'absolute',
-          width: glowSize,
-          height: glowSize,
-          borderRadius: '50%',
-          background: `radial-gradient(circle, ${glowColor}50 0%, ${glowColor}14 55%, transparent 78%)`,
-          filter: `blur(${glowBlur}px)`,
-          animation: glowAnim,
-          pointerEvents: 'none',
-          zIndex: 0,
-          transition: 'background 0.9s ease',
-        }}
-      />
-
-      {/* ── Blob layer: the actual 3D silk image + clip-path morph ──
-          The image IS the reference silk blob.
-          clip-path cuts it into an organic shape that continuously morphs.
-          filter: hue-rotate shifts purple → mood color.
-          overflow:hidden confines the image within the clip boundary.       */}
-      <span
-        style={{
-          position: 'relative',
-          zIndex: 1,
-          display: 'block',
-          width: size,
-          height: size,
-          overflow: 'hidden',
-          clipPath: `polygon(${P[0]})`,
-          animation: morphAnim,
-          filter: `${moodFilter}${brightBoost}`,
-          transition: 'filter 0.9s ease',
-          flexShrink: 0,
-        }}
-      >
-        {/* Scale image up 135% so the blob fills the frame (image has background margins) */}
-        <img
-          src={blobSrc}
-          alt=""
-          draggable={false}
-          style={{
-            width: '135%',
-            height: '135%',
-            objectFit: 'cover',
-            display: 'block',
-            marginLeft: '-17.5%',
-            marginTop: '-17.5%',
-            pointerEvents: 'none',
-            userSelect: 'none',
-          }}
-        />
-      </span>
+      <canvas ref={canvasRef} style={{ display: 'block' }} />
     </span>
   );
 }
