@@ -586,6 +586,7 @@ export default function FlickScient({ myList,onLibraryUpdate }) {
   const [isStreaming,    setIsStreaming]     = useState(false);
   const [currentMood,    setCurrentMood]    = useState<BlobMood>('default');
   const [blobState,      setBlobState]      = useState<BlobState>('idle');
+  const [streamRate,     setStreamRate]     = useState(0);
   const [aiTab,          setAiTab]          = useState('chat');
   const [toast,          setToast]          = useState('');
   const [sessionId,      setSessionId]      = useState(() => crypto.randomUUID());
@@ -599,6 +600,8 @@ export default function FlickScient({ myList,onLibraryUpdate }) {
   const nicknameRef      = useRef(null);
   const userEmailRef     = useRef('');
   const moodTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastChunkTimeRef = useRef<number>(0);
+  const rateWindowRef    = useRef<number[]>([]);
 
   useEffect(() => { chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
 
@@ -717,12 +720,23 @@ const name = data?.nickname || data?.name;
       setMessages(prev => [...prev, { id: msgId, sender: 'ai', text: '' }]);
       setIsStreaming(true);
       setBlobState('generating');
+      lastChunkTimeRef.current = performance.now();
+      rateWindowRef.current = [];
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let fullText = '';
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        const now = performance.now();
+        const interval = now - lastChunkTimeRef.current;
+        lastChunkTimeRef.current = now;
+        // Map interval → rate: <50ms=fast(1.0), >900ms=slow(0.0)
+        const r = Math.max(0, Math.min(1, 1 - (interval - 50) / 850));
+        rateWindowRef.current.push(r);
+        if (rateWindowRef.current.length > 10) rateWindowRef.current.shift();
+        const avg = rateWindowRef.current.reduce((s, v) => s + v, 0) / rateWindowRef.current.length;
+        setStreamRate(avg);
         const chunk = decoder.decode(value, { stream: true });
         fullText += chunk;
         // Strip <action> tags from display in real-time (including partial tags mid-stream)
@@ -732,6 +746,9 @@ const name = data?.nickname || data?.name;
           .trim();
         setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: displayText } : m));
       }
+      setStreamRate(0);
+      lastChunkTimeRef.current = 0;
+      rateWindowRef.current = [];
 
      // ── Parse AI action tags (handles multiple) ────────────────────────────
 const actionMatches = [...fullText.matchAll(/<action>([\s\S]*?)<\/action>/gi)];
@@ -875,7 +892,7 @@ if (actionMatches.length === 0) {
       {/* Header */}
       <div className="flex items-center justify-between bg-[#121218] border-b border-white/5 px-4 py-3 flex-shrink-0">
         <div className="flex items-center gap-2.5">
-          <BlobIcon size={80} pulse={isStreaming} mood={currentMood} state={blobState} />
+          <BlobIcon size={80} pulse={isStreaming} mood={currentMood} state={blobState} streamRate={streamRate} />
           <div>
             <h3 className="font-black text-xs text-purple-400 tracking-[0.15em] uppercase leading-tight">FlickScient</h3>
             <p className="text-[8px] text-gray-600 font-bold uppercase tracking-wider">Final Boss of Film</p>
@@ -990,7 +1007,7 @@ if (actionMatches.length === 0) {
             <div key={msg.id}>
               <div className={`flex items-start gap-3 ${msg.sender==='user' ? 'flex-row-reverse' : ''}`}>
                 <div className={`flex items-center justify-center flex-shrink-0 ${msg.sender==='user' ? 'w-8 h-8 rounded-xl bg-purple-500 border border-purple-400 text-white font-black text-xs shadow-lg' : ''}`}>
-                  {msg.sender==='user' ? <User size={15} /> : <BlobIcon size={32} pulse={isStreaming} mood={currentMood} state={blobState} />}
+                  {msg.sender==='user' ? <User size={15} /> : <BlobIcon size={32} pulse={isStreaming} mood={currentMood} state={blobState} streamRate={streamRate} />}
                 </div>
                 <div className={`flex-1 p-4 rounded-2xl text-[13px] leading-relaxed border select-text ${msg.sender==='user' ? 'bg-[#1a1a24] text-gray-100 border-white/5 font-medium rounded-tr-none ml-6' : 'bg-gradient-to-b from-[#121218] to-[#0f0f14] text-gray-200 border-white/5 rounded-tl-none mr-6 shadow-md'}`}>
                   {msg.text.split(/(\*\*[^*]+\*\*)/).map((part, i) => {
@@ -1044,7 +1061,7 @@ if (actionMatches.length === 0) {
           })}
           {loading && (
             <div className="flex items-center justify-center py-2">
-              <BlobIcon size={52} pulse={true} mood={currentMood} state="generating" animate={true} />
+              <BlobIcon size={52} pulse={true} mood={currentMood} state="generating" animate={true} streamRate={streamRate} />
             </div>
           )}
           <div ref={chatBottomRef} />

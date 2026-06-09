@@ -1,6 +1,9 @@
 // @ts-nocheck
 import React, { useRef, useEffect } from 'react';
 
+// ─────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────
 export type BlobMood =
   | 'default' | 'horror' | 'romance' | 'scifi' | 'action' | 'comedy'
   | 'drama' | 'fantasy' | 'thriller' | 'animation' | 'documentary'
@@ -14,248 +17,393 @@ interface BlobIconProps {
   pulse?: boolean;
   mood?: BlobMood;
   state?: BlobState;
+  streamRate?: number;   // 0.0–1.0  how fast tokens are arriving
   onVanished?: () => void;
 }
 
-// Each mood: rgb for glow math + gradient stops for fold lighting
-const MOODS: Record<string, {
-  gr: number; gg: number; gb: number;   // glow RGB
-  stops: string[];                       // base radial gradient 5 stops
-  hi: string[];                          // fold highlight rgba colors
-}> = {
-  default:  { gr:136, gg:0,   gb:220,
-    stops:['#FF55FF','#CC00CC','#8800BB','#340060','#080018'],
-    hi:['rgba(255,140,255,.74)','rgba(220,60,255,.58)','rgba(160,20,220,.62)','rgba(180,0,220,.52)'] },
-  horror:   { gr:200, gg:0,   gb:0,
-    stops:['#FF5533','#CC0000','#880000','#300000','#080000'],
-    hi:['rgba(255,140,100,.74)','rgba(220,30,0,.58)','rgba(160,0,0,.62)','rgba(180,0,0,.52)'] },
-  romance:  { gr:220, gg:0,   gb:100,
-    stops:['#FF88CC','#FF1493','#990055','#330018','#080005'],
-    hi:['rgba(255,160,220,.74)','rgba(220,30,120,.58)','rgba(160,0,80,.62)','rgba(180,0,100,.52)'] },
-  scifi:    { gr:0,   gg:170, gb:220,
-    stops:['#44FFFF','#00AADD','#006699','#002233','#000608'],
-    hi:['rgba(100,255,255,.74)','rgba(0,200,240,.58)','rgba(0,130,180,.62)','rgba(0,150,200,.52)'] },
-  action:   { gr:220, gg:80,  gb:0,
-    stops:['#FFAA44','#FF5500','#882200','#280A00','#060200'],
-    hi:['rgba(255,180,80,.74)','rgba(220,100,0,.58)','rgba(160,50,0,.62)','rgba(180,60,0,.52)'] },
-  comedy:   { gr:220, gg:170, gb:0,
-    stops:['#FFEE55','#FFBB00','#886600','#282000','#060500'],
-    hi:['rgba(255,240,120,.74)','rgba(220,190,0,.58)','rgba(160,130,0,.62)','rgba(180,140,0,.52)'] },
-  drama:    { gr:50,  gg:100, gb:200,
-    stops:['#6699FF','#1155CC','#103377','#001028','#000308'],
-    hi:['rgba(120,160,255,.74)','rgba(50,100,220,.58)','rgba(20,60,160,.62)','rgba(30,70,180,.52)'] },
-  fantasy:  { gr:130, gg:40,  gb:200,
-    stops:['#DD99FF','#9933CC','#551188','#180028','#050008'],
-    hi:['rgba(220,160,255,.74)','rgba(180,60,240,.58)','rgba(120,20,180,.62)','rgba(140,0,200,.52)'] },
-  thriller: { gr:50,  gg:80,  gb:120,
-    stops:['#7799BB','#334466','#1A2233','#090D11','#020305'],
-    hi:['rgba(130,160,200,.74)','rgba(70,100,150,.58)','rgba(40,60,100,.62)','rgba(50,70,110,.52)'] },
-  animation:{ gr:220, gg:40,  gb:130,
-    stops:['#FF99EE','#FF44AA','#881155','#280018','#060005'],
-    hi:['rgba(255,160,240,.74)','rgba(220,60,170,.58)','rgba(160,20,110,.62)','rgba(180,0,130,.52)'] },
-  documentary:{gr:30, gg:150, gb:70,
-    stops:['#77DDAA','#22AA55','#116633','#042218','#010805'],
-    hi:['rgba(120,220,170,.74)','rgba(40,180,90,.58)','rgba(10,130,60,.62)','rgba(20,150,70,.52)'] },
-  mystery:  { gr:60,  gg:100, gb:150,
-    stops:['#99BBDD','#446688','#223344','#091218','#020405'],
-    hi:['rgba(150,190,220,.74)','rgba(80,120,180,.58)','rgba(40,80,130,.62)','rgba(50,90,150,.52)'] },
-  western:  { gr:160, gg:120, gb:0,
-    stops:['#DDBB44','#AA8800','#665500','#221A00','#060400'],
-    hi:['rgba(220,190,80,.74)','rgba(180,150,0,.58)','rgba(130,100,0,.62)','rgba(150,110,0,.52)'] },
-  war:      { gr:60,  gg:80,  gb:100,
-    stops:['#99AABB','#445566','#222D33','#090D10','#020303'],
-    hi:['rgba(150,170,190,.74)','rgba(80,110,140,.58)','rgba(50,70,90,.62)','rgba(60,80,100,.52)'] },
-  music:    { gr:100, gg:20,  gb:200,
-    stops:['#CC88FF','#7722CC','#440088','#160028','#050008'],
-    hi:['rgba(200,150,255,.74)','rgba(150,50,230,.58)','rgba(100,10,170,.62)','rgba(120,0,190,.52)'] },
-  adventure:{ gr:30,  gg:150, gb:110,
-    stops:['#55DDBB','#22AA77','#116644','#042218','#010806'],
-    hi:['rgba(100,220,190,.74)','rgba(40,180,130,.58)','rgba(10,130,90,.62)','rgba(20,150,100,.52)'] },
-  crime:    { gr:160, gg:70,  gb:0,
-    stops:['#DDAA55','#AA5500','#662200','#200A00','#060200'],
-    hi:['rgba(220,170,80,.74)','rgba(180,100,0,.58)','rgba(130,50,0,.62)','rgba(150,60,0,.52)'] },
-  history:  { gr:150, gg:110, gb:40,
-    stops:['#DDBB88','#AA8844','#664422','#200E08','#060300'],
-    hi:['rgba(220,190,140,.74)','rgba(180,150,70,.58)','rgba(130,90,30,.62)','rgba(150,100,40,.52)'] },
+// ─────────────────────────────────────────────────────────
+// Mood palettes  (color1 = bright fold peaks, color2 = body)
+// ─────────────────────────────────────────────────────────
+type Pal = { c1: [number, number, number]; c2: [number, number, number]; gr: [number, number, number] };
+const PAL: Record<string, Pal> = {
+  default:    { c1:[0.80,0.05,0.90], c2:[0.48,0.00,0.56], gr:[136,0,220] },
+  horror:     { c1:[0.90,0.10,0.05], c2:[0.55,0.00,0.00], gr:[200,0,0]   },
+  romance:    { c1:[0.95,0.30,0.65], c2:[0.60,0.05,0.35], gr:[220,50,130]},
+  scifi:      { c1:[0.15,0.85,0.95], c2:[0.05,0.45,0.65], gr:[20,170,220]},
+  action:     { c1:[0.95,0.50,0.05], c2:[0.55,0.22,0.00], gr:[220,80,0]  },
+  comedy:     { c1:[0.95,0.85,0.10], c2:[0.55,0.45,0.00], gr:[220,180,0] },
+  drama:      { c1:[0.30,0.55,0.95], c2:[0.10,0.25,0.55], gr:[50,100,200]},
+  fantasy:    { c1:[0.70,0.30,0.95], c2:[0.38,0.08,0.55], gr:[130,50,210]},
+  thriller:   { c1:[0.45,0.55,0.70], c2:[0.15,0.20,0.30], gr:[60,90,130] },
+  animation:  { c1:[0.95,0.40,0.80], c2:[0.55,0.10,0.40], gr:[220,50,150]},
+  documentary:{ c1:[0.30,0.80,0.55], c2:[0.10,0.45,0.25], gr:[40,160,90] },
+  mystery:    { c1:[0.45,0.65,0.85], c2:[0.15,0.30,0.50], gr:[70,120,180]},
+  western:    { c1:[0.85,0.70,0.20], c2:[0.50,0.38,0.05], gr:[180,140,20]},
+  war:        { c1:[0.55,0.65,0.75], c2:[0.20,0.28,0.36], gr:[80,110,150]},
+  music:      { c1:[0.65,0.20,0.95], c2:[0.35,0.05,0.55], gr:[120,30,210]},
+  adventure:  { c1:[0.25,0.85,0.70], c2:[0.08,0.48,0.38], gr:[30,170,130]},
+  crime:      { c1:[0.90,0.55,0.20], c2:[0.52,0.25,0.05], gr:[190,110,20]},
+  history:    { c1:[0.88,0.72,0.40], c2:[0.50,0.38,0.15], gr:[180,150,60]},
 };
 
-let _stylesInjected = false;
-function injectStyles() {
-  if (_stylesInjected || typeof document === 'undefined') return;
-  _stylesInjected = true;
-  const el = document.createElement('style');
-  el.textContent = `
-@keyframes blobErrWrap{
-  0%{transform:scale(1);opacity:1;filter:blur(0px)}
-  20%{transform:scale(1.5);opacity:.85;filter:blur(1px)}
-  40%{transform:scale(2.8);opacity:.55;filter:saturate(4) blur(5px)}
-  58%{transform:scale(4);opacity:.2;filter:saturate(6) blur(18px)}
-  72%{transform:scale(.1);opacity:.05;filter:blur(10px)}
-  86%{transform:scale(1.08);opacity:.72;filter:blur(0px)}
-  100%{transform:scale(1);opacity:1;filter:blur(0px)}
+// ─────────────────────────────────────────────────────────
+// GLSL — Vertex Shader
+//   Unit-sphere vertex shader with multi-octave sin noise
+//   displacement + numerically-corrected normals
+// ─────────────────────────────────────────────────────────
+const VERT = `
+precision highp float;
+
+attribute vec3 a_n;          /* unit-sphere position = surface normal */
+
+uniform mat4  u_proj;
+uniform mat4  u_mv;
+uniform mat3  u_nm;
+uniform float u_t;           /* time  */
+uniform float u_amp;         /* displacement amplitude */
+
+varying vec3 v_n;
+varying vec3 v_p;
+
+/* 4-octave smooth noise on a unit sphere */
+float sn(vec3 p) {
+  float n;
+  n  = sin(p.x*2.30+u_t*.65) * cos(p.y*1.90+u_t*.42) * sin(p.z*2.10+u_t*.55) * .40;
+  n += sin(p.x*3.80+u_t*1.25)* cos(p.y*3.50+u_t*.90) * sin(p.z*3.70+u_t*1.10)* .28;
+  n += sin(p.x*5.50+u_t*.45) * cos(p.y*5.20+u_t*.35) * sin(p.z*5.80+u_t*.48) * .18;
+  n += sin(p.x*7.20+u_t*1.85)* cos(p.y*7.80+u_t*2.10)* sin(p.z*6.90+u_t*1.65)* .10;
+  n += cos(p.x*9.10+u_t*.95) * sin(p.y*8.70+u_t*.75) * cos(p.z*9.30+u_t*1.05)* .04;
+  return n;
 }
-@keyframes blobVanishWrap{
-  0%{transform:scale(1);opacity:1}
-  28%{transform:scale(1.28);opacity:.95}
-  62%{transform:scale(.85);opacity:.4}
-  100%{transform:scale(0);opacity:0}
+
+void main() {
+  float n0 = sn(a_n);
+
+  /* displace outward along the surface normal */
+  vec3 pos = a_n * 0.75 + a_n * (n0 * u_amp);
+
+  /* numerical gradient → displaced normal */
+  float e = 0.025;
+  float gx = (sn(a_n + vec3(e,0.,0.)) - n0) / e;
+  float gy = (sn(a_n + vec3(0.,e,0.)) - n0) / e;
+  float gz = (sn(a_n + vec3(0.,0.,e)) - n0) / e;
+  vec3  grad = vec3(gx, gy, gz) * u_amp;
+  vec3  gtan = grad - dot(grad, a_n) * a_n;   /* tangential component */
+  vec3  dn   = normalize(a_n - gtan);
+
+  vec4 mvp = u_mv * vec4(pos, 1.0);
+  v_p = mvp.xyz;
+  v_n = normalize(u_nm * dn);
+
+  gl_Position = u_proj * mvp;
 }
 `;
+
+// ─────────────────────────────────────────────────────────
+// GLSL — Fragment Shader
+//   Blinn-Phong with 3 lights + Fresnel edge darkening
+// ─────────────────────────────────────────────────────────
+const FRAG = `
+precision mediump float;
+
+varying vec3 v_n;
+varying vec3 v_p;
+
+uniform vec3 u_c1;   /* bright fold-peak color  */
+uniform vec3 u_c2;   /* body / shadow color     */
+
+void main() {
+  vec3 N = normalize(v_n);
+  vec3 V = normalize(-v_p);            /* camera at origin in view space */
+
+  /* --- Key light: white, upper-right-front ---- */
+  vec3 L1  = normalize(vec3(3.0, 4.0, 3.5) - v_p);
+  float d1 = max(dot(N, L1), 0.0);
+  vec3  H1 = normalize(L1 + V);
+  float s1 = pow(max(dot(N, H1), 0.0), 72.0);
+
+  /* --- Fill light: violet, left side ---------- */
+  vec3 L2  = normalize(vec3(-4.0, -1.0, 2.0) - v_p);
+  float d2 = max(dot(N, L2), 0.0);
+  vec3  H2 = normalize(L2 + V);
+  float s2 = pow(max(dot(N, H2), 0.0), 28.0);
+
+  /* --- Rim light: below-back, gives depth ----- */
+  vec3 L3  = normalize(vec3(1.0, -4.0, -2.0) - v_p);
+  float d3 = max(dot(N, L3), 0.0);
+
+  vec3 ambient  = u_c2 * 0.10;
+  vec3 diffuse  = u_c1 * (d1 * 0.82)
+                + u_c2 * (d2 * 0.36)
+                + u_c2 * (d3 * 0.20);
+  vec3 specular = vec3(1.00, 0.95, 1.00) * s1 * 0.90    /* white shine   */
+                + vec3(0.75, 0.45, 1.00) * s2 * 0.42;   /* violet sheen  */
+
+  vec3 col = ambient + diffuse + specular;
+
+  /* Fresnel — darkens edges → sphere silhouette */
+  float fr = pow(1.0 - max(dot(N, V), 0.0), 2.8);
+  col = mix(col, vec3(0.02, 0.00, 0.06), fr * 0.83);
+
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+// ─────────────────────────────────────────────────────────
+// Matrix helpers  (column-major, matching WebGL)
+// ─────────────────────────────────────────────────────────
+function mkPerspective(fovY: number, asp: number, near: number, far: number): Float32Array {
+  const f  = 1.0 / Math.tan(fovY * 0.5);
+  const nf = 1.0 / (near - far);
+  return new Float32Array([
+    f / asp, 0,  0,                      0,
+    0,       f,  0,                      0,
+    0,       0,  (far + near) * nf,     -1,
+    0,       0,  2.0 * far * near * nf,  0,
+  ]);
+}
+
+function mkLookAt(ex: number, ey: number, ez: number): Float32Array {
+  /* looking at origin from (ex,ey,ez), up = (0,1,0) */
+  const fl = Math.hypot(ex, ey, ez);
+  const fx = -ex / fl, fy = -ey / fl, fz = -ez / fl;
+
+  /* side = normalize(cross(forward, (0,1,0))) */
+  const sl = Math.hypot(-fz, fx);
+  const sx = -fz / sl, sy = 0, sz = fx / sl;
+
+  /* up2 = cross(side, forward) */
+  const ux2 = -sz * fy;
+  const uy2 =  sz * fx - sx * fz;
+  const uz2 =  sx * fy;
+
+  const tx = -(sx * ex + sy * ey + sz * ez);
+  const ty = -(ux2 * ex + uy2 * ey + uz2 * ez);
+  const tz =  fx * ex + fy * ey + fz * ez;
+
+  return new Float32Array([
+    sx,  ux2, -fx, 0,
+    sy,  uy2, -fy, 0,
+    sz,  uz2, -fz, 0,
+    tx,  ty,   tz, 1,
+  ]);
+}
+
+function upperLeft3(m4: Float32Array): Float32Array {
+  return new Float32Array([
+    m4[0], m4[1], m4[2],
+    m4[4], m4[5], m4[6],
+    m4[8], m4[9], m4[10],
+  ]);
+}
+
+// ─────────────────────────────────────────────────────────
+// Sphere geometry (unit sphere, rings × sectors)
+// ─────────────────────────────────────────────────────────
+function buildSphere(rings: number, secs: number) {
+  const pos: number[] = [], idx: number[] = [];
+  for (let r = 0; r <= rings; r++) {
+    const phi = Math.PI * r / rings;
+    const sp = Math.sin(phi), cp = Math.cos(phi);
+    for (let s = 0; s <= secs; s++) {
+      const th = 2 * Math.PI * s / secs;
+      pos.push(Math.cos(th) * sp, cp, Math.sin(th) * sp);
+    }
+  }
+  for (let r = 0; r < rings; r++) {
+    for (let s = 0; s < secs; s++) {
+      const c = r * (secs + 1) + s;
+      const n = c + secs + 1;
+      idx.push(c, n, c + 1, n, n + 1, c + 1);
+    }
+  }
+  return {
+    data:  new Float32Array(pos),
+    index: new Uint16Array(idx),
+    count: idx.length,
+  };
+}
+
+// ─────────────────────────────────────────────────────────
+// One-time CSS injection for error / complete animations
+// ─────────────────────────────────────────────────────────
+let _css = false;
+function injectCSS() {
+  if (_css || typeof document === 'undefined') return;
+  _css = true;
+  const el = document.createElement('style');
+  el.textContent = `
+@keyframes blobErr{
+  0%  {transform:scale(1);   opacity:1;    filter:blur(0)}
+  20% {transform:scale(1.6); opacity:.85;  filter:blur(1px)}
+  42% {transform:scale(3.0); opacity:.50;  filter:saturate(5) blur(7px)}
+  60% {transform:scale(.10); opacity:.05;  filter:blur(12px)}
+  80% {transform:scale(1.06);opacity:.75;  filter:blur(0)}
+  100%{transform:scale(1);   opacity:1;    filter:blur(0)}
+}
+@keyframes blobVanish{
+  0%  {transform:scale(1);   opacity:1}
+  28% {transform:scale(1.24);opacity:.95}
+  100%{transform:scale(0);   opacity:0}
+}`;
   document.head.appendChild(el);
 }
 
-function rgba(r: number, g: number, b: number, a: number) {
-  return `rgba(${r},${g},${b},${a.toFixed(3)})`;
-}
-
+// ─────────────────────────────────────────────────────────
+// Component
+// ─────────────────────────────────────────────────────────
 export default function BlobIcon({
-  size = 40, animate = true, pulse = false,
-  mood = 'default', state = 'idle', onVanished,
+  size = 40,
+  animate = true,
+  pulse = false,
+  mood = 'default',
+  state = 'idle',
+  streamRate = 0,
+  onVanished,
 }: BlobIconProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef    = useRef<number>(0);
-  const propsRef  = useRef({ pulse, mood, animate });
-  propsRef.current = { pulse, mood, animate };
+  const propsRef  = useRef({ pulse, mood, animate, streamRate });
+  propsRef.current = { pulse, mood, animate, streamRate };
 
-  injectStyles();
+  injectCSS();
 
+  /* onVanished callback after 'complete' finishes */
   useEffect(() => {
     if (state !== 'complete' || !onVanished) return;
-    const t = setTimeout(onVanished, 700);
+    const t = setTimeout(onVanished, 720);
     return () => clearTimeout(t);
   }, [state, onVanished]);
 
+  /* WebGL setup + animation loop — re-runs only when size changes */
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width  = size * dpr;
     canvas.height = size * dpr;
     canvas.style.width  = `${size}px`;
     canvas.style.height = `${size}px`;
-    const ctx = canvas.getContext('2d')!;
-    ctx.scale(dpr, dpr);
 
-    const W = size, H = size, cx = W / 2, cy = H / 2;
+    const gl = canvas.getContext('webgl', {
+      alpha: true, antialias: true, premultipliedAlpha: false,
+    }) as WebGLRenderingContext | null;
+
+    if (!gl) return; /* WebGL unavailable — canvas stays blank */
+
+    gl.clearColor(0, 0, 0, 0);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+
+    /* ── compile shader ── */
+    const compile = (type: number, src: string) => {
+      const sh = gl.createShader(type)!;
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+        console.error('[BlobIcon] shader error:', gl.getShaderInfoLog(sh));
+        return null;
+      }
+      return sh;
+    };
+
+    const vs = compile(gl.VERTEX_SHADER,   VERT);
+    const fs = compile(gl.FRAGMENT_SHADER, FRAG);
+    if (!vs || !fs) return;
+
+    const prog = gl.createProgram()!;
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      console.error('[BlobIcon] link error:', gl.getProgramInfoLog(prog));
+      return;
+    }
+    gl.useProgram(prog);
+
+    /* ── geometry ── */
+    const RINGS = 64, SECS = 64;
+    const geo = buildSphere(RINGS, SECS);
+
+    const vbuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbuf);
+    gl.bufferData(gl.ARRAY_BUFFER, geo.data, gl.STATIC_DRAW);
+
+    const ibuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibuf);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, geo.index, gl.STATIC_DRAW);
+
+    /* ── attribute ── */
+    const loc_n = gl.getAttribLocation(prog, 'a_n');
+    gl.enableVertexAttribArray(loc_n);
+    gl.vertexAttribPointer(loc_n, 3, gl.FLOAT, false, 0, 0);
+
+    /* ── uniforms ── */
+    const u_proj = gl.getUniformLocation(prog, 'u_proj');
+    const u_mv   = gl.getUniformLocation(prog, 'u_mv');
+    const u_nm   = gl.getUniformLocation(prog, 'u_nm');
+    const u_t    = gl.getUniformLocation(prog, 'u_t');
+    const u_amp  = gl.getUniformLocation(prog, 'u_amp');
+    const u_c1   = gl.getUniformLocation(prog, 'u_c1');
+    const u_c2   = gl.getUniformLocation(prog, 'u_c2');
+
+    /* ── static matrices (camera never moves) ── */
+    const proj = mkPerspective(Math.PI / 4, 1.0, 0.1, 20.0);
+    const mv   = mkLookAt(0, 0, 3);
+    const nm   = upperLeft3(mv);
+    gl.uniformMatrix4fv(u_proj, false, proj);
+    gl.uniformMatrix4fv(u_mv,   false, mv);
+    gl.uniformMatrix3fv(u_nm,   false, nm);
+
+    /* ── render loop ── */
     let startTs: number | null = null;
 
     const frame = (ts: number) => {
       if (startTs === null) startTs = ts;
       const sec = (ts - startTs) * 0.001;
-      const { pulse: p, mood: m } = propsRef.current;
-      const pal = MOODS[m] || MOODS.default;
-      const spd = p ? 2.4 : 1.0;
-      const t   = sec * spd;
 
-      ctx.clearRect(0, 0, W, H);
+      const { pulse: p, mood: m, streamRate: sr } = propsRef.current;
+      const pal = PAL[m] || PAL.default;
 
-      // ── OUTER GLOW ──
-      const glowPulse = 0.30 + 0.16 * Math.sin(sec * (p ? 4.5 : 1.8));
-      const glowR = W * (p ? 0.60 : 0.50);
-      const gg = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
-      gg.addColorStop(0,    rgba(pal.gr, pal.gg, pal.gb, glowPulse * 1.4));
-      gg.addColorStop(0.45, rgba(pal.gr, pal.gg, pal.gb, glowPulse));
-      gg.addColorStop(1,    rgba(pal.gr, pal.gg, pal.gb, 0));
-      ctx.fillStyle = gg;
-      ctx.fillRect(0, 0, W, H);
+      /* speed and amplitude: pulse + live streaming rate both drive them */
+      const speed = 1.0 + (p ? 1.40 : 0) + sr * 1.20;
+      const amp   = 0.24 + (p ? 0.09 : 0) + sr * 0.09;
 
-      // ── BLOB SHAPE (20 control points, 6 harmonics each) ──
-      const N = 20;
-      const baseR = W * 0.38;
-      const pts: { x: number; y: number }[] = [];
-      for (let i = 0; i < N; i++) {
-        const a = (i / N) * Math.PI * 2 - Math.PI * 0.5;
-        const r = baseR * (1
-          + 0.155 * Math.sin(t * 0.63 + a * 2.1  + 0.30)
-          + 0.105 * Math.sin(t * 1.27 + a * 3.7  + 1.10)
-          + 0.075 * Math.sin(t * 0.44 + a * 1.8  + 2.20)
-          + 0.055 * Math.cos(t * 1.83 + a * 4.5  + 0.80)
-          + 0.040 * Math.sin(t * 0.27 + a * 5.3  + 1.50)
-          + 0.030 * Math.cos(t * 2.35 + a * 6.2  + 2.70)
-        );
-        pts.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
-      }
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-      // Smooth closed curve through midpoints (Catmull–Rom approximation)
-      ctx.beginPath();
-      const m0x = (pts[N - 1].x + pts[0].x) / 2;
-      const m0y = (pts[N - 1].y + pts[0].y) / 2;
-      ctx.moveTo(m0x, m0y);
-      for (let i = 0; i < N; i++) {
-        const p0 = pts[i];
-        const p1 = pts[(i + 1) % N];
-        ctx.quadraticCurveTo(p0.x, p0.y, (p0.x + p1.x) / 2, (p0.y + p1.y) / 2);
-      }
-      ctx.closePath();
+      gl.uniform1f(u_t,   sec * speed);
+      gl.uniform1f(u_amp, amp);
+      gl.uniform3fv(u_c1, new Float32Array(pal.c1));
+      gl.uniform3fv(u_c2, new Float32Array(pal.c2));
 
-      // Clip everything that follows to the blob shape
-      ctx.save();
-      ctx.clip();
-
-      // ── HELPER: paint a radial gradient patch (blended over entire clip area) ──
-      const patch = (px: number, py: number, r: number, color: string, alpha = 1.0) => {
-        const g = ctx.createRadialGradient(px, py, 0, px, py, r);
-        g.addColorStop(0, color);
-        g.addColorStop(1, 'transparent');
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = g;
-        ctx.fillRect(0, 0, W, H);
-        ctx.globalAlpha = 1;
-      };
-
-      // ── BASE GRADIENT ──
-      // Focus point slowly drifts (simulates light source shift over silk)
-      const bx = cx + W * 0.10 * Math.sin(t * 0.28);
-      const by = cy - H * 0.08 * Math.cos(t * 0.35);
-      const bg = ctx.createRadialGradient(bx, by - H * 0.13, W * 0.01, cx, cy, W * 0.54);
-      bg.addColorStop(0,    pal.stops[0]);
-      bg.addColorStop(0.26, pal.stops[1]);
-      bg.addColorStop(0.54, pal.stops[2]);
-      bg.addColorStop(0.80, pal.stops[3]);
-      bg.addColorStop(1,    pal.stops[4]);
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, W, H);
-
-      // ── FOLD HIGHLIGHTS (4 animated bright patches = lit silk folds) ──
-      patch(cx+W*.18+W*.04*Math.sin(t*.50+0.0), cy-H*.17+H*.03*Math.cos(t*.42+0.0), W*.33, pal.hi[0]);
-      patch(cx-W*.06+W*.05*Math.sin(t*.60+1.1), cy-H*.21+H*.04*Math.cos(t*.70+0.5), W*.25, pal.hi[1]);
-      patch(cx-W*.20+W*.05*Math.sin(t*.45+2.2), cy+H*.03+H*.03*Math.sin(t*.52+1.2), W*.25, pal.hi[2]);
-      patch(cx+W*.17+W*.03*Math.sin(t*.55+3.3), cy+H*.20+H*.04*Math.sin(t*.48+2.1), W*.23, pal.hi[3]);
-
-      // ── SHADOW VALLEYS (dark creases between folds) ──
-      patch(cx-W*.20, cy+H*.22+H*.03*Math.sin(t*.50+4.0), W*.34, 'rgba(0,0,0,.76)');
-      patch(cx+W*.04, cy+H*.07+H*.02*Math.cos(t*.58+1.0), W*.19, 'rgba(0,0,0,.62)');
-      patch(cx-W*.17, cy-H*.16+H*.03*Math.cos(t*.42+1.5), W*.23, 'rgba(0,0,0,.50)');
-      patch(cx+W*.11, cy-H*.04+H*.02*Math.sin(t*.65+2.5), W*.13, 'rgba(0,0,0,.38)');
-
-      // ── EDGE VIGNETTE (darkens the blob rim → makes it look round and 3D) ──
-      const vg = ctx.createRadialGradient(cx, cy, W * 0.24, cx, cy, W * 0.54);
-      vg.addColorStop(0,   'transparent');
-      vg.addColorStop(0.65,'transparent');
-      vg.addColorStop(1,   'rgba(0,0,0,.92)');
-      ctx.fillStyle = vg;
-      ctx.fillRect(0, 0, W, H);
-
-      // ── SPECULAR HIGHLIGHTS (shiny silk sheen) ──
-      patch(cx+W*.17+W*.02*Math.sin(t*.33), cy-H*.19+H*.02*Math.cos(t*.38), W*.095, 'rgba(255,255,255,.90)');
-      patch(cx+W*.24+W*.01*Math.sin(t*.45), cy-H*.03+H*.01*Math.cos(t*.50), W*.065, 'rgba(255,255,255,.58)');
-
-      // Silver fold-edge accents (thin bright slivers where folds meet)
-      patch(cx-W*.10+W*.02*Math.sin(t*.40), cy+H*.26, W*.075, 'rgba(200,170,255,.60)', 0.7);
-      patch(cx+W*.26, cy+H*.13+H*.02*Math.sin(t*.44), W*.055, 'rgba(200,180,255,.55)', 0.6);
-
-      ctx.restore();
+      gl.drawElements(gl.TRIANGLES, geo.count, gl.UNSIGNED_SHORT, 0);
 
       rafRef.current = requestAnimationFrame(frame);
     };
 
     rafRef.current = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(rafRef.current);
+
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      gl.deleteBuffer(vbuf);
+      gl.deleteBuffer(ibuf);
+      gl.deleteShader(vs);
+      gl.deleteShader(fs);
+      gl.deleteProgram(prog);
+    };
   }, [size]);
 
+  /* glow color from mood palette */
+  const pal        = PAL[mood] || PAL.default;
+  const glowAlpha  = pulse ? 0.80 : 0.55;
+  const glowRadius = Math.round(size * 0.20);
+  const glowColor  = `rgba(${pal.gr[0]},${pal.gr[1]},${pal.gr[2]},${glowAlpha})`;
+
   const wrapAnim =
-    state === 'error'    ? 'blobErrWrap 1.35s cubic-bezier(.4,0,.2,1) forwards'
-    : state === 'complete' ? 'blobVanishWrap .72s ease-in forwards'
+    state === 'error'    ? 'blobErr 1.40s cubic-bezier(.4,0,.2,1) forwards'
+    : state === 'complete' ? 'blobVanish .72s ease-in forwards'
     : 'none';
 
   return (
@@ -269,6 +417,7 @@ export default function BlobIcon({
         height: size,
         flexShrink: 0,
         animation: wrapAnim,
+        filter: `drop-shadow(0 0 ${glowRadius}px ${glowColor})`,
         willChange: 'transform, opacity, filter',
       }}
     >
