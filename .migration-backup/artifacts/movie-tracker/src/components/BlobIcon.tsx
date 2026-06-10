@@ -1,9 +1,7 @@
 // @ts-nocheck
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
+import * as THREE from 'three';
 
-// ─────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────
 export type BlobMood =
   | 'default' | 'horror' | 'romance' | 'scifi' | 'action' | 'comedy'
   | 'drama' | 'fantasy' | 'thriller' | 'animation' | 'documentary'
@@ -17,411 +15,420 @@ interface BlobIconProps {
   pulse?: boolean;
   mood?: BlobMood;
   state?: BlobState;
-  streamRate?: number;   // 0.0–1.0  how fast tokens are arriving
+  streamRate?: number;
   onVanished?: () => void;
 }
 
-// ─────────────────────────────────────────────────────────
-// Mood palettes  (color1 = bright fold peaks, color2 = body)
-// ─────────────────────────────────────────────────────────
-type Pal = { c1: [number, number, number]; c2: [number, number, number]; gr: [number, number, number] };
-const PAL: Record<string, Pal> = {
-  default:    { c1:[0.80,0.05,0.90], c2:[0.48,0.00,0.56], gr:[136,0,220] },
-  horror:     { c1:[0.90,0.10,0.05], c2:[0.55,0.00,0.00], gr:[200,0,0]   },
-  romance:    { c1:[0.95,0.30,0.65], c2:[0.60,0.05,0.35], gr:[220,50,130]},
-  scifi:      { c1:[0.15,0.85,0.95], c2:[0.05,0.45,0.65], gr:[20,170,220]},
-  action:     { c1:[0.95,0.50,0.05], c2:[0.55,0.22,0.00], gr:[220,80,0]  },
-  comedy:     { c1:[0.95,0.85,0.10], c2:[0.55,0.45,0.00], gr:[220,180,0] },
-  drama:      { c1:[0.30,0.55,0.95], c2:[0.10,0.25,0.55], gr:[50,100,200]},
-  fantasy:    { c1:[0.70,0.30,0.95], c2:[0.38,0.08,0.55], gr:[130,50,210]},
-  thriller:   { c1:[0.45,0.55,0.70], c2:[0.15,0.20,0.30], gr:[60,90,130] },
-  animation:  { c1:[0.95,0.40,0.80], c2:[0.55,0.10,0.40], gr:[220,50,150]},
-  documentary:{ c1:[0.30,0.80,0.55], c2:[0.10,0.45,0.25], gr:[40,160,90] },
-  mystery:    { c1:[0.45,0.65,0.85], c2:[0.15,0.30,0.50], gr:[70,120,180]},
-  western:    { c1:[0.85,0.70,0.20], c2:[0.50,0.38,0.05], gr:[180,140,20]},
-  war:        { c1:[0.55,0.65,0.75], c2:[0.20,0.28,0.36], gr:[80,110,150]},
-  music:      { c1:[0.65,0.20,0.95], c2:[0.35,0.05,0.55], gr:[120,30,210]},
-  adventure:  { c1:[0.25,0.85,0.70], c2:[0.08,0.48,0.38], gr:[30,170,130]},
-  crime:      { c1:[0.90,0.55,0.20], c2:[0.52,0.25,0.05], gr:[190,110,20]},
-  history:    { c1:[0.88,0.72,0.40], c2:[0.50,0.38,0.15], gr:[180,150,60]},
+// ─────────────────────────────────────────────────────────────────
+// PALETTE — exact colours from the reference orb image analysis:
+//
+//   deep   = dark navy-violet  (shadow pockets / crevices)
+//   mid    = deep body colour  (base surface)
+//   bright = vivid lit colour  (the main surface under light)
+//   high   = near-white silver (specular ridge lines + rim)
+//   glow   = CSS outer glow colour
+//   css    = CSS fallback gradient
+//
+// Default palette pixel-measured from the reference screenshot:
+//   deep   ≈ rgb(18,  8, 41)   = vec3(0.07, 0.03, 0.16)
+//   mid    ≈ rgb(87, 20,117)   = vec3(0.34, 0.08, 0.46)
+//   bright ≈ rgb(168,41,189)   = vec3(0.66, 0.16, 0.74)
+//   high   ≈ rgb(250,242,255)  = vec3(0.98, 0.95, 1.00)
+// ─────────────────────────────────────────────────────────────────
+type Pal = {
+  deep: [number,number,number];
+  mid:  [number,number,number];
+  bright:[number,number,number];
+  high: [number,number,number];
+  glow: string;
+  css:  string;
 };
 
-// ─────────────────────────────────────────────────────────
-// GLSL — Vertex Shader
-//   Unit-sphere vertex shader with multi-octave sin noise
-//   displacement + numerically-corrected normals
-// ─────────────────────────────────────────────────────────
-const VERT = `
-precision highp float;
+const PAL: Record<string, Pal> = {
+  // Default: exact reference image magenta-purple
+  default:    { deep:[0.07,0.03,0.16], mid:[0.34,0.08,0.46], bright:[0.66,0.16,0.74], high:[0.98,0.95,1.00], glow:'rgba(168,41,189,0.55)', css:'radial-gradient(circle,#A829BD,#120829)' },
+  // Horror: blood crimson
+  horror:     { deep:[0.12,0.01,0.02], mid:[0.40,0.04,0.06], bright:[0.75,0.08,0.12], high:[1.00,0.92,0.90], glow:'rgba(190,20,30,0.55)',  css:'radial-gradient(circle,#C01018,#1e0204)' },
+  // Romance: rose/deep pink
+  romance:    { deep:[0.12,0.02,0.08], mid:[0.40,0.06,0.22], bright:[0.75,0.14,0.44], high:[1.00,0.94,0.97], glow:'rgba(190,35,112,0.55)', css:'radial-gradient(circle,#C02470,#1e0314)' },
+  // Sci-fi: electric cyan-teal
+  scifi:      { deep:[0.01,0.08,0.16], mid:[0.03,0.22,0.44], bright:[0.06,0.48,0.80], high:[0.92,0.99,1.00], glow:'rgba(15,122,204,0.55)', css:'radial-gradient(circle,#0F7ACD,#021428)' },
+  // Action: intense orange
+  action:     { deep:[0.14,0.05,0.01], mid:[0.42,0.16,0.02], bright:[0.80,0.36,0.04], high:[1.00,0.96,0.88], glow:'rgba(204,92,10,0.55)',  css:'radial-gradient(circle,#CC5C0A,#23080a)' },
+  // Comedy: bright sunny yellow
+  comedy:     { deep:[0.12,0.10,0.01], mid:[0.38,0.32,0.02], bright:[0.75,0.68,0.04], high:[1.00,0.99,0.88], glow:'rgba(190,172,10,0.55)', css:'radial-gradient(circle,#BEAC0A,#1e1a02)' },
+  // Drama: deep royal blue
+  drama:      { deep:[0.02,0.04,0.16], mid:[0.06,0.12,0.46], bright:[0.12,0.28,0.80], high:[0.92,0.96,1.00], glow:'rgba(30,72,204,0.55)',  css:'radial-gradient(circle,#1E48CC,#030a28)' },
+  // Fantasy: vivid violet
+  fantasy:    { deep:[0.08,0.02,0.18], mid:[0.26,0.04,0.52], bright:[0.52,0.10,0.90], high:[0.96,0.90,1.00], glow:'rgba(133,25,230,0.55)', css:'radial-gradient(circle,#8519E6,#14032e)' },
+  // Thriller: cold steel grey-blue
+  thriller:   { deep:[0.04,0.05,0.08], mid:[0.14,0.18,0.28], bright:[0.28,0.36,0.56], high:[0.94,0.96,0.99], glow:'rgba(72,92,143,0.55)',  css:'radial-gradient(circle,#485C8F,#0a0c14)' },
+  // Animation: hot pink
+  animation:  { deep:[0.12,0.02,0.10], mid:[0.38,0.05,0.28], bright:[0.78,0.12,0.58], high:[1.00,0.93,0.98], glow:'rgba(199,30,148,0.55)', css:'radial-gradient(circle,#C71E94,#1e031a)' },
+  // Documentary: forest green
+  documentary:{ deep:[0.02,0.10,0.04], mid:[0.04,0.30,0.12], bright:[0.08,0.60,0.24], high:[0.90,1.00,0.94], glow:'rgba(20,153,61,0.55)',  css:'radial-gradient(circle,#14993D,#020e06)' },
+  // Mystery: deep teal-indigo
+  mystery:    { deep:[0.02,0.06,0.12], mid:[0.06,0.18,0.36], bright:[0.12,0.36,0.68], high:[0.90,0.96,1.00], glow:'rgba(30,92,173,0.55)',  css:'radial-gradient(circle,#1E5CAD,#03091e)' },
+  // Western: golden amber
+  western:    { deep:[0.14,0.08,0.01], mid:[0.42,0.26,0.02], bright:[0.76,0.54,0.06], high:[1.00,0.98,0.88], glow:'rgba(194,138,15,0.55)', css:'radial-gradient(circle,#C28A0F,#231202)' },
+  // War: dark olive
+  war:        { deep:[0.06,0.07,0.04], mid:[0.20,0.24,0.12], bright:[0.38,0.44,0.22], high:[0.94,0.96,0.90], glow:'rgba(97,112,56,0.55)',  css:'radial-gradient(circle,#617038,#0e1208)' },
+  // Music: electric purple
+  music:      { deep:[0.08,0.02,0.16], mid:[0.24,0.05,0.46], bright:[0.48,0.10,0.84], high:[0.96,0.90,1.00], glow:'rgba(122,25,214,0.55)', css:'radial-gradient(circle,#7A19D6,#14032a)' },
+  // Adventure: jade green-teal
+  adventure:  { deep:[0.02,0.10,0.08], mid:[0.04,0.30,0.28], bright:[0.08,0.60,0.52], high:[0.90,1.00,0.98], glow:'rgba(20,153,133,0.55)', css:'radial-gradient(circle,#149985,#020e0c)' },
+  // Crime: burnt sienna
+  crime:      { deep:[0.14,0.06,0.02], mid:[0.40,0.18,0.04], bright:[0.76,0.36,0.08], high:[1.00,0.96,0.90], glow:'rgba(194,92,20,0.55)',  css:'radial-gradient(circle,#C25C14,#23090a)' },
+  // History: burnished gold
+  history:    { deep:[0.12,0.09,0.02], mid:[0.36,0.28,0.04], bright:[0.70,0.58,0.10], high:[1.00,0.99,0.90], glow:'rgba(179,148,25,0.55)', css:'radial-gradient(circle,#B39419,#1e1504)' },
+};
 
-attribute vec3 a_n;          /* unit-sphere position = surface normal */
+// ─────────────────────────────────────────────────────────────────
+// NOISE GLSL — Ashima Simplex 3D noise (exact from meta-orb source)
+// ─────────────────────────────────────────────────────────────────
+const noiseGLSL = /* glsl */`
+vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x,289.0);}
+vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
 
-uniform mat4  u_proj;
-uniform mat4  u_mv;
-uniform mat3  u_nm;
-uniform float u_t;           /* time  */
-uniform float u_amp;         /* displacement amplitude */
-
-varying vec3 v_n;
-varying vec3 v_p;
-
-/* 4-octave smooth noise on a unit sphere */
-float sn(vec3 p) {
-  float n;
-  n  = sin(p.x*2.30+u_t*.65) * cos(p.y*1.90+u_t*.42) * sin(p.z*2.10+u_t*.55) * .40;
-  n += sin(p.x*3.80+u_t*1.25)* cos(p.y*3.50+u_t*.90) * sin(p.z*3.70+u_t*1.10)* .28;
-  n += sin(p.x*5.50+u_t*.45) * cos(p.y*5.20+u_t*.35) * sin(p.z*5.80+u_t*.48) * .18;
-  n += sin(p.x*7.20+u_t*1.85)* cos(p.y*7.80+u_t*2.10)* sin(p.z*6.90+u_t*1.65)* .10;
-  n += cos(p.x*9.10+u_t*.95) * sin(p.y*8.70+u_t*.75) * cos(p.z*9.30+u_t*1.05)* .04;
-  return n;
+float snoise(vec3 v){
+  const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+  vec3 i  = floor(v + dot(v, C.yyy));
+  vec3 x0 = v - i + dot(i, C.xxx);
+  vec3 g  = step(x0.yzx, x0.xyz);
+  vec3 l  = 1.0 - g;
+  vec3 i1 = min(g.xyz, l.zxy);
+  vec3 i2 = max(g.xyz, l.zxy);
+  vec3 x1 = x0 - i1 + C.xxx;
+  vec3 x2 = x0 - i2 + 2.0*C.xxx;
+  vec3 x3 = x0 - 1.0 + 3.0*C.xxx;
+  i = mod(i, 289.0);
+  vec4 p = permute(permute(permute(
+    i.z + vec4(0.0, i1.z, i2.z, 1.0))
+  + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+  + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+  float n_ = 1.0/7.0;
+  vec3  ns = n_ * D.wyz - D.xzx;
+  vec4  j  = p - 49.0 * floor(p * ns.z * ns.z);
+  vec4  x_ = floor(j * ns.z);
+  vec4  y_ = floor(j - 7.0 * x_);
+  vec4  x  = x_ *ns.x + ns.yyyy;
+  vec4  y  = y_ *ns.x + ns.yyyy;
+  vec4  h  = 1.0 - abs(x) - abs(y);
+  vec4 b0 = vec4(x.xy, y.xy);
+  vec4 b1 = vec4(x.zw, y.zw);
+  vec4 s0 = floor(b0)*2.0 + 1.0;
+  vec4 s1 = floor(b1)*2.0 + 1.0;
+  vec4 sh = -step(h, vec4(0.0));
+  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+  vec3 p0 = vec3(a0.xy, h.x);
+  vec3 p1 = vec3(a0.zw, h.y);
+  vec3 p2 = vec3(a1.xy, h.z);
+  vec3 p3 = vec3(a1.zw, h.w);
+  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+  p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+  vec4 m = max(0.6 - vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)), 0.0);
+  m = m * m;
+  return 42.0 * dot(m*m, vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
 }
 
-void main() {
-  float n0 = sn(a_n);
-
-  /* displace outward along the surface normal */
-  vec3 pos = a_n * 0.75 + a_n * (n0 * u_amp);
-
-  /* numerical gradient → displaced normal */
-  float e = 0.025;
-  float gx = (sn(a_n + vec3(e,0.,0.)) - n0) / e;
-  float gy = (sn(a_n + vec3(0.,e,0.)) - n0) / e;
-  float gz = (sn(a_n + vec3(0.,0.,e)) - n0) / e;
-  vec3  grad = vec3(gx, gy, gz) * u_amp;
-  vec3  gtan = grad - dot(grad, a_n) * a_n;   /* tangential component */
-  vec3  dn   = normalize(a_n - gtan);
-
-  vec4 mvp = u_mv * vec4(pos, 1.0);
-  v_p = mvp.xyz;
-  v_n = normalize(u_nm * dn);
-
-  gl_Position = u_proj * mvp;
+float fbm(vec3 p){
+  float f = 0.0;
+  f += 1.00 * snoise(p * 0.9);
+  f += 0.40 * snoise(p * 1.8 + 13.7);
+  f += 0.14 * snoise(p * 3.2 + 41.2);
+  return f;
 }
 `;
 
-// ─────────────────────────────────────────────────────────
-// GLSL — Fragment Shader
-//   Blinn-Phong with 3 lights + Fresnel edge darkening
-// ─────────────────────────────────────────────────────────
-const FRAG = `
-precision mediump float;
+// ─────────────────────────────────────────────────────────────────
+// VERTEX SHADER — exact port from meta-orb.tsx
+// ─────────────────────────────────────────────────────────────────
+const VERT = /* glsl */`
+precision highp float;
+uniform float uTime;
+uniform float uDisplace;
 
-varying vec3 v_n;
-varying vec3 v_p;
+varying vec3  vNormalW;
+varying vec3  vViewDir;
+varying float vFold;
+varying vec3  vPos;
 
-uniform vec3 u_c1;   /* bright fold-peak color  */
-uniform vec3 u_c2;   /* body / shadow color     */
+${noiseGLSL}
 
-void main() {
-  vec3 N = normalize(v_n);
-  vec3 V = normalize(-v_p);            /* camera at origin in view space */
+vec3 displaced(vec3 dir){
+  float t = uTime * 0.16;
+  float n = fbm(dir * 1.3 + vec3(0.0, 0.0, t));
+  n += 0.35 * fbm(dir * 2.2 - vec3(t, t * 0.5, 0.0));
+  return dir * (1.0 + n * uDisplace);
+}
 
-  /* --- Key light: white, upper-right-front ---- */
-  vec3 L1  = normalize(vec3(3.0, 4.0, 3.5) - v_p);
-  float d1 = max(dot(N, L1), 0.0);
-  vec3  H1 = normalize(L1 + V);
-  float s1 = pow(max(dot(N, H1), 0.0), 72.0);
+void main(){
+  vec3 dir = normalize(position);
+  vec3 dp  = displaced(dir);
+  vFold    = length(dp) - 1.0;
 
-  /* --- Fill light: violet, left side ---------- */
-  vec3 L2  = normalize(vec3(-4.0, -1.0, 2.0) - v_p);
-  float d2 = max(dot(N, L2), 0.0);
-  vec3  H2 = normalize(L2 + V);
-  float s2 = pow(max(dot(N, H2), 0.0), 28.0);
+  vec3 tangent   = normalize(cross(dir, vec3(0.0, 1.0, 0.0) + 0.001));
+  vec3 bitangent = normalize(cross(dir, tangent));
+  float eps = 0.04;
+  vec3 a = displaced(normalize(dir + tangent   * eps));
+  vec3 b = displaced(normalize(dir + bitangent * eps));
+  vec3 newNormal = normalize(cross(a - dp, b - dp));
+  if (dot(newNormal, dir) < 0.0) newNormal = -newNormal;
 
-  /* --- Rim light: below-back, gives depth ----- */
-  vec3 L3  = normalize(vec3(1.0, -4.0, -2.0) - v_p);
-  float d3 = max(dot(N, L3), 0.0);
+  vec4 worldPos = modelMatrix * vec4(dp, 1.0);
+  vPos          = dp;
+  vNormalW      = normalize(mat3(modelMatrix) * newNormal);
+  vViewDir      = normalize(cameraPosition - worldPos.xyz);
+  gl_Position   = projectionMatrix * viewMatrix * worldPos;
+}
+`;
 
-  vec3 ambient  = u_c2 * 0.10;
-  vec3 diffuse  = u_c1 * (d1 * 0.82)
-                + u_c2 * (d2 * 0.36)
-                + u_c2 * (d3 * 0.20);
-  vec3 specular = vec3(1.00, 0.95, 1.00) * s1 * 0.90    /* white shine   */
-                + vec3(0.75, 0.45, 1.00) * s2 * 0.42;   /* violet sheen  */
+// ─────────────────────────────────────────────────────────────────
+// FRAGMENT SHADER — exact port with mood-uniform colours
+//
+//  Uses the reflection vector against a vertical gradient env map —
+//  this is the secret to the liquid-glass chrome appearance.
+//  Colours driven by uniforms so mood changes work.
+// ─────────────────────────────────────────────────────────────────
+const FRAG = /* glsl */`
+precision highp float;
+uniform float uTime;
+uniform vec3  uDeep;    /* dark shadow / crevice colour  */
+uniform vec3  uMid;     /* body colour                   */
+uniform vec3  uBright;  /* lit surface colour            */
+uniform vec3  uHigh;    /* specular / rim highlight      */
 
-  vec3 col = ambient + diffuse + specular;
+varying vec3  vNormalW;
+varying vec3  vViewDir;
+varying float vFold;
+varying vec3  vPos;
 
-  /* Fresnel — darkens edges → sphere silhouette */
-  float fr = pow(1.0 - max(dot(N, V), 0.0), 2.8);
-  col = mix(col, vec3(0.02, 0.00, 0.06), fr * 0.83);
+void main(){
+  vec3 N = normalize(vNormalW);
+  vec3 V = normalize(vViewDir);
+  vec3 R = reflect(-V, N);
+
+  /* Vertical environment gradient — dark at bottom, bright at top */
+  float h = R.y * 0.5 + 0.5;   /* 0 = bottom, 1 = top */
+  vec3 env = uDeep;
+  env = mix(env, uMid,    smoothstep(0.18, 0.50, h));
+  env = mix(env, uBright, smoothstep(0.52, 0.80, h));
+  env = mix(env, uHigh,   smoothstep(0.92, 1.00, h));
+  /* Saturated belly lower down */
+  env = mix(env, uBright, smoothstep(0.42, 0.28, h) * 0.45);
+
+  /* Horizontal chrome streak */
+  float sweep = smoothstep(0.80, 0.98, R.x * 0.5 + 0.5);
+  env = mix(env, uHigh, sweep * 0.4);
+
+  /* Crevices → deep dark */
+  float crease = smoothstep(0.02, -0.32, vFold);
+  env = mix(env, uDeep * 0.35, crease);
+
+  /* Specular */
+  vec3 L1 = normalize(vec3(0.3, 0.9, 0.45));
+  vec3 H1 = normalize(L1 + V);
+  float spec = pow(max(dot(N, H1), 0.0), 80.0);
+
+  /* Fresnel rim */
+  float fres = pow(1.0 - max(dot(N, V), 0.0), 2.5);
+
+  vec3 col = env;
+  col = mix(col, uHigh, clamp(spec, 0.0, 1.0));
+  col += uHigh * pow(fres, 4.0) * 0.7;
+  col = mix(col, uDeep * 0.7, fres * 0.35);
+
+  /* Filmic tone curve — deep darks, controlled highlights */
+  col = col / (col + vec3(0.3));
+  col = pow(col, vec3(0.92));
 
   gl_FragColor = vec4(col, 1.0);
 }
 `;
 
-// ─────────────────────────────────────────────────────────
-// Matrix helpers  (column-major, matching WebGL)
-// ─────────────────────────────────────────────────────────
-function mkPerspective(fovY: number, asp: number, near: number, far: number): Float32Array {
-  const f  = 1.0 / Math.tan(fovY * 0.5);
-  const nf = 1.0 / (near - far);
-  return new Float32Array([
-    f / asp, 0,  0,                      0,
-    0,       f,  0,                      0,
-    0,       0,  (far + near) * nf,     -1,
-    0,       0,  2.0 * far * near * nf,  0,
-  ]);
-}
-
-function mkLookAt(ex: number, ey: number, ez: number): Float32Array {
-  /* looking at origin from (ex,ey,ez), up = (0,1,0) */
-  const fl = Math.hypot(ex, ey, ez);
-  const fx = -ex / fl, fy = -ey / fl, fz = -ez / fl;
-
-  /* side = normalize(cross(forward, (0,1,0))) */
-  const sl = Math.hypot(-fz, fx);
-  const sx = -fz / sl, sy = 0, sz = fx / sl;
-
-  /* up2 = cross(side, forward) */
-  const ux2 = -sz * fy;
-  const uy2 =  sz * fx - sx * fz;
-  const uz2 =  sx * fy;
-
-  const tx = -(sx * ex + sy * ey + sz * ez);
-  const ty = -(ux2 * ex + uy2 * ey + uz2 * ez);
-  const tz =  fx * ex + fy * ey + fz * ez;
-
-  return new Float32Array([
-    sx,  ux2, -fx, 0,
-    sy,  uy2, -fy, 0,
-    sz,  uz2, -fz, 0,
-    tx,  ty,   tz, 1,
-  ]);
-}
-
-function upperLeft3(m4: Float32Array): Float32Array {
-  return new Float32Array([
-    m4[0], m4[1], m4[2],
-    m4[4], m4[5], m4[6],
-    m4[8], m4[9], m4[10],
-  ]);
-}
-
-// ─────────────────────────────────────────────────────────
-// Sphere geometry (unit sphere, rings × sectors)
-// ─────────────────────────────────────────────────────────
-function buildSphere(rings: number, secs: number) {
-  const pos: number[] = [], idx: number[] = [];
-  for (let r = 0; r <= rings; r++) {
-    const phi = Math.PI * r / rings;
-    const sp = Math.sin(phi), cp = Math.cos(phi);
-    for (let s = 0; s <= secs; s++) {
-      const th = 2 * Math.PI * s / secs;
-      pos.push(Math.cos(th) * sp, cp, Math.sin(th) * sp);
-    }
-  }
-  for (let r = 0; r < rings; r++) {
-    for (let s = 0; s < secs; s++) {
-      const c = r * (secs + 1) + s;
-      const n = c + secs + 1;
-      idx.push(c, n, c + 1, n, n + 1, c + 1);
-    }
-  }
-  return {
-    data:  new Float32Array(pos),
-    index: new Uint16Array(idx),
-    count: idx.length,
-  };
-}
-
-// ─────────────────────────────────────────────────────────
-// One-time CSS injection for error / complete animations
-// ─────────────────────────────────────────────────────────
-let _css = false;
+// ─────────────────────────────────────────────────────────────────
+// CSS keyframes
+// ─────────────────────────────────────────────────────────────────
+let _cssInjected = false;
 function injectCSS() {
-  if (_css || typeof document === 'undefined') return;
-  _css = true;
+  if (_cssInjected || typeof document === 'undefined') return;
+  _cssInjected = true;
   const el = document.createElement('style');
   el.textContent = `
-@keyframes blobErr{
-  0%  {transform:scale(1);   opacity:1;    filter:blur(0)}
-  20% {transform:scale(1.6); opacity:.85;  filter:blur(1px)}
-  42% {transform:scale(3.0); opacity:.50;  filter:saturate(5) blur(7px)}
-  60% {transform:scale(.10); opacity:.05;  filter:blur(12px)}
-  80% {transform:scale(1.06);opacity:.75;  filter:blur(0)}
-  100%{transform:scale(1);   opacity:1;    filter:blur(0)}
+@keyframes blobErr {
+  0%   {transform:scale(1);   opacity:1;   filter:blur(0)}
+  20%  {transform:scale(1.6); opacity:.85; filter:blur(1px)}
+  42%  {transform:scale(3.0); opacity:.5;  filter:saturate(5) blur(7px)}
+  60%  {transform:scale(.10); opacity:.05; filter:blur(12px)}
+  80%  {transform:scale(1.06);opacity:.75; filter:blur(0)}
+  100% {transform:scale(1);   opacity:1;   filter:blur(0)}
 }
-@keyframes blobVanish{
-  0%  {transform:scale(1);   opacity:1}
-  28% {transform:scale(1.24);opacity:.95}
-  100%{transform:scale(0);   opacity:0}
+@keyframes blobVanish {
+  0%   {transform:scale(1);   opacity:1}
+  28%  {transform:scale(1.24);opacity:.95}
+  100% {transform:scale(0);   opacity:0}
+}
+@keyframes blobPulse {
+  0%,100% {opacity:.82}
+  50%     {opacity:1}
 }`;
   document.head.appendChild(el);
 }
 
-// ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
 // Component
-// ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
 export default function BlobIcon({
-  size = 40,
-  animate = true,
-  pulse = false,
-  mood = 'default',
-  state = 'idle',
+  size       = 40,
+  animate    = true,
+  pulse      = false,
+  mood       = 'default',
+  state      = 'idle',
   streamRate = 0,
   onVanished,
 }: BlobIconProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rafRef    = useRef<number>(0);
-  const propsRef  = useRef({ pulse, mood, animate, streamRate });
-  propsRef.current = { pulse, mood, animate, streamRate };
+  const mountRef = useRef<HTMLDivElement>(null);
+  const propsRef = useRef({ pulse, mood, animate, streamRate, state });
+  const [webglOk, setWebglOk] = useState(true);
+  propsRef.current = { pulse, mood, animate, streamRate, state };
 
   injectCSS();
 
-  /* onVanished callback after 'complete' finishes */
   useEffect(() => {
     if (state !== 'complete' || !onVanished) return;
-    const t = setTimeout(onVanished, 720);
-    return () => clearTimeout(t);
+    const id = setTimeout(onVanished, 720);
+    return () => clearTimeout(id);
   }, [state, onVanished]);
 
-  /* WebGL setup + animation loop — re-runs only when size changes */
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = mountRef.current;
+    if (!container) return;
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width  = size * dpr;
-    canvas.height = size * dpr;
-    canvas.style.width  = `${size}px`;
-    canvas.style.height = `${size}px`;
-
-    const gl = canvas.getContext('webgl', {
-      alpha: true, antialias: true, premultipliedAlpha: false,
-    }) as WebGLRenderingContext | null;
-
-    if (!gl) return; /* WebGL unavailable — canvas stays blank */
-
-    gl.clearColor(0, 0, 0, 0);
-    gl.enable(gl.DEPTH_TEST);
-    gl.depthFunc(gl.LEQUAL);
-
-    /* ── compile shader ── */
-    const compile = (type: number, src: string) => {
-      const sh = gl.createShader(type)!;
-      gl.shaderSource(sh, src);
-      gl.compileShader(sh);
-      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-        console.error('[BlobIcon] shader error:', gl.getShaderInfoLog(sh));
-        return null;
-      }
-      return sh;
-    };
-
-    const vs = compile(gl.VERTEX_SHADER,   VERT);
-    const fs = compile(gl.FRAGMENT_SHADER, FRAG);
-    if (!vs || !fs) return;
-
-    const prog = gl.createProgram()!;
-    gl.attachShader(prog, vs);
-    gl.attachShader(prog, fs);
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      console.error('[BlobIcon] link error:', gl.getProgramInfoLog(prog));
+    // ── Renderer ──────────────────────────────────────────────────
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
+    } catch {
+      setWebglOk(false);
       return;
     }
-    gl.useProgram(prog);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    renderer.setPixelRatio(dpr);
+    renderer.setSize(size, size);
+    renderer.setClearColor(0x000000, 0);
+    if (!renderer.getContext()) { renderer.dispose(); setWebglOk(false); return; }
+    container.appendChild(renderer.domElement);
 
-    /* ── geometry ── */
-    const RINGS = 64, SECS = 64;
-    const geo = buildSphere(RINGS, SECS);
+    // ── Scene / Camera ─────────────────────────────────────────────
+    const scene  = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 50);
+    camera.position.set(0, 0, 4.2);
 
-    const vbuf = gl.createBuffer()!;
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbuf);
-    gl.bufferData(gl.ARRAY_BUFFER, geo.data, gl.STATIC_DRAW);
+    // ── IcosahedronGeometry — detail=18 is plenty at 24–80px sizes ─
+    // detail=50 → ~25k vertices; detail=18 → ~3.2k — 8× less GPU work
+    const geo = new THREE.IcosahedronGeometry(1.5, 18);
 
-    const ibuf = gl.createBuffer()!;
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibuf);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, geo.index, gl.STATIC_DRAW);
+    const pal0 = PAL.default;
+    const uniforms = {
+      uTime:     { value: 0.0 },
+      uDisplace: { value: 0.22 },   // exact value from meta-orb source
+      uDeep:     { value: new THREE.Vector3(...pal0.deep) },
+      uMid:      { value: new THREE.Vector3(...pal0.mid) },
+      uBright:   { value: new THREE.Vector3(...pal0.bright) },
+      uHigh:     { value: new THREE.Vector3(...pal0.high) },
+    };
 
-    /* ── attribute ── */
-    const loc_n = gl.getAttribLocation(prog, 'a_n');
-    gl.enableVertexAttribArray(loc_n);
-    gl.vertexAttribPointer(loc_n, 3, gl.FLOAT, false, 0, 0);
+    const mat  = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms });
+    const blob = new THREE.Mesh(geo, mat);
+    scene.add(blob);
 
-    /* ── uniforms ── */
-    const u_proj = gl.getUniformLocation(prog, 'u_proj');
-    const u_mv   = gl.getUniformLocation(prog, 'u_mv');
-    const u_nm   = gl.getUniformLocation(prog, 'u_nm');
-    const u_t    = gl.getUniformLocation(prog, 'u_t');
-    const u_amp  = gl.getUniformLocation(prog, 'u_amp');
-    const u_c1   = gl.getUniformLocation(prog, 'u_c1');
-    const u_c2   = gl.getUniformLocation(prog, 'u_c2');
-
-    /* ── static matrices (camera never moves) ── */
-    const proj = mkPerspective(Math.PI / 4, 1.0, 0.1, 20.0);
-    const mv   = mkLookAt(0, 0, 3);
-    const nm   = upperLeft3(mv);
-    gl.uniformMatrix4fv(u_proj, false, proj);
-    gl.uniformMatrix4fv(u_mv,   false, mv);
-    gl.uniformMatrix3fv(u_nm,   false, nm);
-
-    /* ── render loop ── */
+    // ── Render loop — capped at 30fps, paused when off-screen ──────
     let startTs: number | null = null;
+    let lastRender = 0;
+    let rafId  = 0;
+    let alive  = true;
+    let visible = true;
+    const TARGET_MS = 1000 / 30; // 30fps cap — halves GPU load vs 60fps
+
+    // Pause rendering when the orb scrolls off-screen
+    const observer = new IntersectionObserver(
+      ([entry]) => { visible = entry.isIntersecting; },
+      { threshold: 0 }
+    );
+    observer.observe(container);
 
     const frame = (ts: number) => {
+      if (!alive) return;
+      rafId = requestAnimationFrame(frame);
+      if (!visible) return;                      // paused — off-screen
+      if (ts - lastRender < TARGET_MS) return;  // throttle to 30fps
+      lastRender = ts;
+
       if (startTs === null) startTs = ts;
       const sec = (ts - startTs) * 0.001;
 
       const { pulse: p, mood: m, streamRate: sr } = propsRef.current;
       const pal = PAL[m] || PAL.default;
 
-      /* speed and amplitude: pulse + live streaming rate both drive them */
-      const speed = 1.0 + (p ? 1.40 : 0) + sr * 1.20;
-      const amp   = 0.24 + (p ? 0.09 : 0) + sr * 0.09;
+      const displace = 0.22 + (p ? 0.05 : 0) + sr * 0.04;
+      uniforms.uTime.value     = sec;
+      uniforms.uDisplace.value = displace;
+      uniforms.uDeep.value.set(...pal.deep);
+      uniforms.uMid.value.set(...pal.mid);
+      uniforms.uBright.value.set(...pal.bright);
+      uniforms.uHigh.value.set(...pal.high);
 
-      gl.viewport(0, 0, canvas.width, canvas.height);
-      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      blob.rotation.y = sec * 0.12;
+      blob.rotation.x = Math.sin(sec * 0.15) * 0.12;
 
-      gl.uniform1f(u_t,   sec * speed);
-      gl.uniform1f(u_amp, amp);
-      gl.uniform3fv(u_c1, new Float32Array(pal.c1));
-      gl.uniform3fv(u_c2, new Float32Array(pal.c2));
-
-      gl.drawElements(gl.TRIANGLES, geo.count, gl.UNSIGNED_SHORT, 0);
-
-      rafRef.current = requestAnimationFrame(frame);
+      try { renderer.render(scene, camera); }
+      catch { alive = false; setWebglOk(false); }
     };
 
-    rafRef.current = requestAnimationFrame(frame);
+    rafId = requestAnimationFrame(frame);
 
     return () => {
-      cancelAnimationFrame(rafRef.current);
-      gl.deleteBuffer(vbuf);
-      gl.deleteBuffer(ibuf);
-      gl.deleteShader(vs);
-      gl.deleteShader(fs);
-      gl.deleteProgram(prog);
+      alive = false;
+      cancelAnimationFrame(rafId);
+      observer.disconnect();
+      renderer.dispose();
+      geo.dispose();
+      mat.dispose();
+      if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
     };
   }, [size]);
 
-  /* glow color from mood palette */
-  const pal        = PAL[mood] || PAL.default;
-  const glowAlpha  = pulse ? 0.80 : 0.55;
-  const glowRadius = Math.round(size * 0.20);
-  const glowColor  = `rgba(${pal.gr[0]},${pal.gr[1]},${pal.gr[2]},${glowAlpha})`;
+  // ── CSS glow ───────────────────────────────────────────────────
+  const pal     = PAL[mood] || PAL.default;
+  const r1      = Math.round(size * (pulse ? 0.38 : 0.22));
+  const r2      = Math.round(size * (pulse ? 0.65 : 0.40));
+  const glowCSS = `drop-shadow(0 0 ${r1}px ${pal.glow}) drop-shadow(0 0 ${r2}px ${pal.glow})`;
 
   const wrapAnim =
-    state === 'error'    ? 'blobErr 1.40s cubic-bezier(.4,0,.2,1) forwards'
+    state === 'error'      ? 'blobErr 1.40s cubic-bezier(.4,0,.2,1) forwards'
     : state === 'complete' ? 'blobVanish .72s ease-in forwards'
+    : pulse                ? 'blobPulse 1.8s ease-in-out infinite'
     : 'none';
 
+  if (!webglOk) {
+    return (
+      <span style={{
+        display:'inline-flex', alignItems:'center', justifyContent:'center',
+        width:size, height:size, flexShrink:0,
+        borderRadius:'50%', background:pal.css, filter:glowCSS, animation:wrapAnim,
+      }} />
+    );
+  }
+
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        position: 'relative',
-        width: size,
-        height: size,
-        flexShrink: 0,
-        animation: wrapAnim,
-        filter: `drop-shadow(0 0 ${glowRadius}px ${glowColor})`,
-        willChange: 'transform, opacity, filter',
-      }}
-    >
-      <canvas ref={canvasRef} style={{ display: 'block' }} />
+    <span style={{
+      display:'inline-flex', alignItems:'center', justifyContent:'center',
+      position:'relative', width:size, height:size, flexShrink:0,
+      animation:wrapAnim, filter:glowCSS, willChange:'transform,opacity,filter',
+    }}>
+      <div ref={mountRef} style={{ lineHeight: 0 }} />
     </span>
   );
 }
