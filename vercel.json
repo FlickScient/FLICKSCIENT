@@ -1,0 +1,5 @@
+{
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "buildCommand": "cd artifacts/movie-tracker && npx vite build --config vite.config.ts",
+  "outputDirectory": "artifacts/movie-tracker/dist"
+}
