@@ -20,25 +20,14 @@ interface BlobIconProps {
 }
 
 type Pal = {
-  c1: string;   // bright body — vivid warm magenta-purple (lit surfaces)
-  c2: string;   // mid body — rich purple (mid-tone folds)
-  c3: string;   // deep shadow / edge — dark indigo matching bg → creates glassy edge
-  spec: string; // fold-ridge specular highlight — near-white lavender
-  glow: string; // CSS outer glow
-  css: string;  // CSS fallback (no WebGL)
+  c1: string;
+  c2: string;
+  c3: string;
+  spec: string;
+  glow: string;
+  css: string;
 };
 
-// ─────────────────────────────────────────────────────────────────
-// PALETTE — default colours measured pixel-by-pixel from the video
-//
-//  c1  (#C030C0): warm true magenta-purple. R≈B, sampled from
-//       bright lit surfaces in frames 1,7,10. NOT blue-heavy.
-//  c2  (#7A1EA8): mid-depth purple, sampled from shadow-side faces
-//  c3  (#1e1550): dark indigo — SAME HUE AS BACKGROUND.
-//       This is the key to the glassy transparent edge: Fresnel
-//       blends toward the background colour, not toward black.
-//  spec(#f2eeff): near-white with lavender tint — fold-ridge lines
-// ─────────────────────────────────────────────────────────────────
 const PAL: Record<string, Pal> = {
   default:    { c1:'#C030C0', c2:'#7A1EA8', c3:'#1e1550', spec:'#f2eeff', glow:'rgba(180,0,220,0.55)',  css:'radial-gradient(circle,#C030C0,#3a0060)' },
   horror:     { c1:'#EE1133', c2:'#880011', c3:'#1a0510', spec:'#ffe8ee', glow:'rgba(220,0,40,0.55)',   css:'radial-gradient(circle,#EE1133,#440008)' },
@@ -61,11 +50,12 @@ const PAL: Record<string, Pal> = {
 };
 
 // ─────────────────────────────────────────────────────────────────
-// VERTEX SHADER — domain-warped folded-silk displacement
+// VERTEX SHADER
 //
-//  Measured from video: ~4-8 folds visible per frame, slow motion
-//  (~4.5s full cycle), large smooth fabric-fold amplitude.
-//  Key light comes from upper-LEFT (matches all 10 frames).
+//  Reference analysis: the orb stays ROUND. The folds are large and
+//  smooth (3-5 big folds), like crumpled silk. Low frequency noise
+//  with small amplitude keeps the silhouette circular.
+//  Domain warp is light — enough to make folds organic, not spiky.
 // ─────────────────────────────────────────────────────────────────
 const VERT = /* glsl */`
 precision highp float;
@@ -78,27 +68,26 @@ varying vec3  v_normal;
 varying vec3  v_viewPos;
 varying float v_disp;
 
-/* ── Domain warp — w=0.58 measured from video fold depth ──────── */
+/* ── Light domain warp — keeps folds organic but not chaotic ── */
 vec3 warpCoord(vec3 p, float t) {
-  float w = 0.58;
+  float w = 0.30;
   return vec3(
-    p.x + w * sin(p.y*1.90 + t*0.22 + 0.00) * cos(p.z*1.65 + t*0.18),
-    p.y + w * cos(p.x*1.75 + t*0.20 + 2.09) * sin(p.z*2.00 + t*0.21),
-    p.z + w * sin(p.x*1.95 + t*0.21 + 4.19) * cos(p.y*1.80 + t*0.19)
+    p.x + w * sin(p.y * 1.2 + t * 0.18),
+    p.y + w * cos(p.x * 1.1 + t * 0.16 + 2.1),
+    p.z + w * sin(p.z * 1.3 + t * 0.17 + 4.2)
   );
 }
 
-/* ── 4-octave noise — primary freq 1.45 for large smooth folds ── */
+/* ── 2-octave LOW-frequency noise — big smooth folds only ─── */
+/* Reference has ~3-5 large folds, not bumpy high-freq surface */
 float blobN(vec3 q, float t) {
   float n = 0.0;
-  /* Large primary folds — low freq = big smooth curves like the video */
-  n += sin(q.x*1.45+t*0.25)*cos(q.y*1.70+t*0.20)*sin(q.z*1.55+t*0.22)*0.54;
-  /* Secondary crumple */
-  n += sin(q.x*2.90+t*0.44)*cos(q.y*2.65+t*0.38)*sin(q.z*3.10+t*0.42)*0.26;
-  /* Fine wrinkle */
-  n += sin(q.x*5.10+t*0.72)*cos(q.y*4.75+t*0.62)*sin(q.z*5.40+t*0.68)*0.11;
-  /* Micro surface */
-  n += sin(q.x*7.60+t*1.10)*cos(q.y*7.20+t*0.98)*sin(q.z*7.90+t*1.06)*0.04;
+  /* Primary — very large folds, frequency 0.85 */
+  n += sin(q.x*0.85+t*0.18)*cos(q.y*0.95+t*0.15)*sin(q.z*0.90+t*0.17) * 0.65;
+  /* Secondary — medium folds for crumple detail */
+  n += sin(q.x*1.80+t*0.32)*cos(q.y*1.70+t*0.28)*sin(q.z*1.90+t*0.30) * 0.28;
+  /* Slight crinkle at ridges only */
+  n += sin(q.x*3.50+t*0.60)*cos(q.y*3.20+t*0.55)*sin(q.z*3.70+t*0.58) * 0.07;
   return n;
 }
 
@@ -106,30 +95,21 @@ void main() {
   vec3  p = normal;
   float t = u_time * u_speed;
 
-  /* Axis-asymmetric breathing — amplitudes match video swell rhythm */
-  float bx = 1.0 + 0.20*sin(t*0.22 + 0.00);
-  float by = 1.0 + 0.26*cos(t*0.18 + 2.10);
-  float bz = 1.0 + 0.18*sin(t*0.25 + 4.20);
-
   vec3  q   = warpCoord(p, t);
   float n0  = blobN(q, t);
 
-  /* u_amp=0.68 → deep enough folds to deform the silhouette clearly */
-  float disp = n0 * u_amp;
-  vec3 displaced = vec3(
-    p.x * (0.66 + disp) * bx,
-    p.y * (0.66 + disp) * by,
-    p.z * (0.66 + disp) * bz
-  );
+  /* Low amplitude (0.38) so overall shape stays ROUND like reference */
+  float disp    = n0 * u_amp;
+  vec3 displaced = p * (0.72 + disp);
 
-  /* Numerical gradient on warped noise for correct crease normals */
-  float e  = 0.015;
+  /* Numerical gradient for crease normals */
+  float e  = 0.020;
   float gx = (blobN(warpCoord(p+vec3(e,0,0),t), t) - n0) / e;
   float gy = (blobN(warpCoord(p+vec3(0,e,0),t), t) - n0) / e;
   float gz = (blobN(warpCoord(p+vec3(0,0,e),t), t) - n0) / e;
-  vec3 grad = vec3(gx,gy,gz) * u_amp;
-  vec3 gtan = grad - dot(grad,p)*p;
-  vec3 dn   = normalize(p - gtan);
+  vec3 grad = vec3(gx, gy, gz) * u_amp;
+  vec3 gtan = grad - dot(grad, p) * p;
+  vec3 dn   = normalize(p - gtan * 0.8);
 
   vec4 mvPos = modelViewMatrix * vec4(displaced, 1.0);
   v_viewPos  = mvPos.xyz;
@@ -141,67 +121,77 @@ void main() {
 `;
 
 // ─────────────────────────────────────────────────────────────────
-// FRAGMENT SHADER — precisely tuned from video frame analysis
+// FRAGMENT SHADER
 //
-//  The glassy transparent edge is the KEY visual:
-//    Fresnel blends toward c3 (dark indigo = background colour),
-//    NOT toward black. This makes the edge look like glass/water
-//    fading into the background, exactly like the video.
+//  Reference colours:
+//    c1 = #C030C0 vivid magenta — covers MOST of the lit surface
+//    c2 = #7A1EA8 mid purple    — shadow faces
+//    c3 = #1e1550 dark indigo  — deep fold pockets (inside valleys)
+//    spec = #f2eeff near-white — thin fold-ridge lines + silk sheen
 //
-//  Key light is upper-LEFT in the video (frames 1-10 consistent).
-//  Body diffuse uses a 3-stop displacement ramp:
-//    deep valley (c3 dark indigo) → mid fold (c2 purple) → crest (c1 magenta)
+//  Glassy transparent edge: alpha fades at grazing angles (Fresnel).
+//  DoubleSide on, so fold interiors render and show dark valleys.
+//  Back faces are darker (inside of the silk folds).
 // ─────────────────────────────────────────────────────────────────
 const FRAG = /* glsl */`
 precision highp float;
 
-uniform vec3 u_c1;    /* vivid warm magenta-purple — main surface colour */
-uniform vec3 u_c2;    /* mid purple                                       */
-uniform vec3 u_c3;    /* dark indigo — deepest pockets + edge             */
-uniform vec3 u_spec;  /* near-white — fold-ridge specular                 */
+uniform vec3 u_c1;
+uniform vec3 u_c2;
+uniform vec3 u_c3;
+uniform vec3 u_spec;
 
 varying vec3  v_normal;
 varying vec3  v_viewPos;
 varying float v_disp;
 
 void main() {
-  vec3  N   = normalize(v_normal);
+  /* Back-face: flip normal so interior fold faces shade correctly */
+  vec3  N   = normalize(v_normal) * (gl_FrontFacing ? 1.0 : -1.0);
   vec3  V   = normalize(-v_viewPos);
   float NdV = max(dot(N, V), 0.0);
 
-  /* ── Key light: upper-left-front (from video analysis) ── */
-  vec3  L1  = normalize(vec3(-1.8, 3.8, 3.5));
-  float d1  = max(dot(N, L1), 0.0);
-  vec3  H1  = normalize(L1 + V);
-  float spec1 = pow(max(dot(N,H1),0.0), 160.0);  /* fold-ridge line  */
-  float spec2 = pow(max(dot(N,H1),0.0),  30.0);  /* broad silk sheen */
+  /* ── Key light: upper-left (matches reference video) ── */
+  vec3  L1    = normalize(vec3(-1.5, 3.5, 3.0));
+  float d1    = max(dot(N, L1), 0.0);
+  vec3  H1    = normalize(L1 + V);
+  float NdH1  = max(dot(N, H1), 0.0);
+  float sLine = pow(NdH1, 180.0);   /* sharp fold-ridge highlight line */
+  float sSilk = pow(NdH1,  25.0);   /* broad silk sheen */
 
-  /* ── Fill light: soft right ── */
-  vec3  L2 = normalize(vec3(3.0, 0.5, 2.0));
+  /* ── Warm fill light: right ── */
+  vec3  L2 = normalize(vec3(2.5, 0.5, 2.0));
   float d2 = max(dot(N, L2), 0.0);
 
-  /* ── Surface colour: vivid magenta by default, dark only in deep pockets */
-  /* Use lighting + displacement together to drive colour                   */
-  float lit    = d1 * 0.85 + d2 * 0.20;          /* 0 = unlit, 1 = fully lit */
-  float depthT = clamp(v_disp * 1.5 + 0.7, 0.0, 1.0); /* 0=deep valley, 1=crest */
-  float bright = clamp(lit * 0.7 + depthT * 0.5, 0.0, 1.0);
+  /* ── Base colour from displacement ── */
+  /* Neutral surfaces (v_disp≈0) show vivid c1.                     */
+  /* Only negative displacement (deep valleys) drops toward c3.     */
+  float depthT = clamp(v_disp * 1.2 + 0.75, 0.0, 1.0);
+  vec3 body = mix(u_c3, u_c2, clamp(depthT * 1.5, 0.0, 1.0));
+       body = mix(body, u_c1, clamp(depthT * 1.8 - 0.2, 0.0, 1.0));
 
-  /* Base colour — vivid c1 on lit crests, c3 only in deep dark pockets */
-  vec3 col = mix(u_c3, u_c2, depthT);
-       col = mix(col,  u_c1, clamp(bright, 0.0, 1.0));
+  /* ── Lighting ── */
+  /* Back faces get darker inner-fold colour (like seeing silk interior) */
+  float frontBoost = gl_FrontFacing ? 1.0 : 0.45;
+  vec3 col = body * (d1 * 0.90 + d2 * 0.22 + 0.18) * frontBoost;
 
-  /* Emissive floor: minimum 28% of vivid c1 so blob is never pitch-black */
-  col = max(col, u_c1 * 0.28);
+  /* Emissive floor — blob is never pitch black, always shows c1 hue */
+  col = max(col, u_c1 * (gl_FrontFacing ? 0.22 : 0.08));
 
-  /* Specular highlights */
-  col += u_spec * spec1 * 1.8;
-  col += u_spec * spec2 * 0.18;
+  /* Specular only on front faces */
+  if (gl_FrontFacing) {
+    col += u_spec * sLine * 2.0;
+    col += u_spec * sSilk * 0.15 * d1;
+  }
 
-  /* Fresnel glassy edge — blends toward c3 (dark indigo background colour) */
-  float fr = pow(1.0 - NdV, 2.8);
-  col = mix(col, u_c3, fr * 0.60);
+  /* ── Glassy transparent edge via alpha ── */
+  /* At grazing angles (NdV→0), alpha fades to ~0 → looks transparent */
+  /* This is the KEY to the thin glassy fins visible in the reference  */
+  float alpha = 0.20 + 0.80 * pow(NdV, 0.45);
+  /* Back faces (inside folds) are semi-transparent */
+  if (!gl_FrontFacing) alpha *= 0.55;
 
-  gl_FragColor = vec4(col, 1.0);
+  gl_FragColor = vec4(col, alpha);
 }
 `;
 
@@ -286,22 +276,29 @@ export default function BlobIcon({
     const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 50);
     camera.position.set(0, 0, 3.2);
 
-    // ── 200-segment sphere for smooth domain-warped silk folds ─────
-    const geo = new THREE.SphereGeometry(1, 200, 200);
+    // ── High-segment sphere for smooth large folds ─────────────────
+    const geo = new THREE.SphereGeometry(1, 160, 160);
 
     const pal0 = PAL.default;
     const uniforms = {
-      // u_speed=0.65: matches the slow ~4.5s cycle measured in the video
       u_time:  { value: 0.0 },
-      u_amp:   { value: 0.68 },
-      u_speed: { value: 0.65 },
+      u_amp:   { value: 0.38 },   // low amp → shape stays round like reference
+      u_speed: { value: 0.55 },   // slow organic motion
       u_c1:    { value: new THREE.Color(pal0.c1) },
       u_c2:    { value: new THREE.Color(pal0.c2) },
       u_c3:    { value: new THREE.Color(pal0.c3) },
       u_spec:  { value: new THREE.Color(pal0.spec) },
     };
 
-    const mat  = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms });
+    const mat = new THREE.ShaderMaterial({
+      vertexShader:   VERT,
+      fragmentShader: FRAG,
+      uniforms,
+      transparent: true,       // enables alpha for glassy edge fade
+      side: THREE.DoubleSide,  // see fold interiors (dark valleys visible through top)
+      depthWrite: false,        // correct transparency sorting
+    });
+
     const blob = new THREE.Mesh(geo, mat);
     scene.add(blob);
 
@@ -318,9 +315,8 @@ export default function BlobIcon({
 
       const { pulse: p, mood: m, streamRate: sr } = propsRef.current;
       const pal   = PAL[m] || PAL.default;
-      // pulse=true: speed up to ~2.8× for wild mode, amp stays close to base
-      const speed = 0.65 + (p ? 1.10 : 0) + sr * 1.20;
-      const amp   = 0.68 + (p ? 0.10 : 0) + sr * 0.07;
+      const speed = 0.55 + (p ? 0.90 : 0) + sr * 1.0;
+      const amp   = 0.38 + (p ? 0.08 : 0) + sr * 0.06;
 
       uniforms.u_time.value  = sec;
       uniforms.u_speed.value = speed;
@@ -330,9 +326,9 @@ export default function BlobIcon({
       uniforms.u_c3.value.set(pal.c3);
       uniforms.u_spec.value.set(pal.spec);
 
-      /* Slow gentle rotation so all fold angles are visible */
-      blob.rotation.y = sec * 0.07;
-      blob.rotation.x = Math.sin(sec * 0.06) * 0.05;
+      /* Very slow gentle rotation — shows all fold angles */
+      blob.rotation.y = sec * 0.06;
+      blob.rotation.x = Math.sin(sec * 0.05) * 0.04;
 
       try { renderer.render(scene, camera); }
       catch { alive = false; setWebglOk(false); }
@@ -364,7 +360,6 @@ export default function BlobIcon({
     : pulse                ? 'blobPulse 1.8s ease-in-out infinite'
     : 'none';
 
-  // ── CSS fallback when WebGL is unavailable ──────────────────────
   if (!webglOk) {
     return (
       <span style={{
