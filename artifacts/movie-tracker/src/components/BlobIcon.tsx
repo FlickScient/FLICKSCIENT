@@ -183,34 +183,34 @@ void main() {
   float d2 = max(dot(N,L2), 0.0);
 
   /* ── Displacement-based colour ramp ───────────────────────────── */
-  /* v_disp: negative=deep concave, positive=high convex crest      */
-  float t1  = clamp(v_disp * 2.5 + 0.50, 0.0, 1.0);   /* c3 → c2 */
-  float t2  = clamp(v_disp * 3.0 + 0.20, 0.0, 1.0);   /* c2 → c1 */
+  /* Shifted offsets so neutral surfaces show the vivid c1 colour,  */
+  /* only deep concave pockets drop toward c3 (dark indigo).        */
+  float t1  = clamp(v_disp * 2.2 + 0.80, 0.0, 1.0);   /* c3 → c2 */
+  float t2  = clamp(v_disp * 2.8 + 0.62, 0.0, 1.0);   /* c2 → c1 */
   vec3 body = mix(u_c3, u_c2, t1);
        body = mix(body, u_c1, t2);
   /* Boost fold crests toward spec colour */
-  body = mix(body, u_spec * 0.70, clamp((v_disp - 0.55)*3.8, 0.0, 1.0));
+  body = mix(body, u_spec * 0.75, clamp((v_disp - 0.45)*4.0, 0.0, 1.0));
 
   /* ── Lighting ─────────────────────────────────────────────────── */
-  vec3 ambient  = u_c3 * 0.45;                    /* ambient from bg colour */
-  vec3 diffuse  = body * (d1*0.68 + d2*0.22);
-  vec3 specular = u_spec * s1sharp * 2.0           /* bright ridge lines  */
-                + u_spec * 0.40 * s1soft * 0.40;   /* soft silk sheen     */
+  vec3 ambient  = u_c2 * 0.32;                    /* mid-purple ambient keeps shadows vivid */
+  vec3 diffuse  = body * (d1*0.88 + d2*0.28);
+  vec3 specular = u_spec * s1sharp * 2.2           /* bright ridge lines  */
+                + u_spec * 0.45 * s1soft * 0.42;   /* soft silk sheen     */
 
   vec3 col = ambient + diffuse + specular;
 
-  /* ── GLASSY EDGE: Fresnel blends to c3 (dark indigo background)  */
-  /* This is what makes the edge look transparent/glassy in video   */
+  /* ── GLASSY EDGE: Fresnel blends to c3 (background indigo)       */
+  /* Lighter blend target + weaker strength = colour visible at edge */
   float fr = pow(1.0 - NdV, 2.6);
-  col = mix(col, u_c3 * 0.50, fr * 0.82);
+  col = mix(col, u_c3 * 0.80, fr * 0.68);
 
-  /* ── AO proxy — gently darkens deep concave areas ─────────────── */
-  /* (0.72+0.28*ao) is gentle — video shows colored shadows, not black) */
+  /* ── AO proxy — gentle, keeps vivid colour in mid-depth areas ─── */
   float ao = clamp(v_disp * 1.8 + 0.62, 0.0, 1.0);
-  col *= (0.72 + 0.28 * ao);
+  col *= (0.76 + 0.24 * ao);
 
-  /* ── Blue-indigo shift in deepest concave areas (matches video) ─ */
-  col = mix(col, col * vec3(0.72, 0.68, 1.30), clamp((-v_disp)*1.8, 0.0, 0.40));
+  /* ── Blue-indigo shift only in deepest concave areas ────────────  */
+  col = mix(col, col * vec3(0.70, 0.65, 1.35), clamp((-v_disp)*1.5, 0.0, 0.35));
 
   gl_FragColor = vec4(col, 1.0);
 }
