@@ -1,9 +1,5 @@
 {
-  "version": 2,
-  "installCommand": "pnpm install",
-  "buildCommand": "pnpm --filter @workspace/movie-tracker run build",
-  "outputDirectory": "dist",
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "buildCommand": "cd artifacts/movie-tracker && pnpm run build",
+  "outputDirectory": "dist"
 }
