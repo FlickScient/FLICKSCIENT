@@ -326,9 +326,9 @@ export default function BlobIcon({
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 50);
     camera.position.set(0, 0, 4.2);
 
-    // ── IcosahedronGeometry — exact same as reference orb ─────────
-    // detail=50 gives plenty of smoothness at icon sizes (24–80px)
-    const geo = new THREE.IcosahedronGeometry(1.5, 50);
+    // ── IcosahedronGeometry — detail=18 is plenty at 24–80px sizes ─
+    // detail=50 → ~25k vertices; detail=18 → ~3.2k — 8× less GPU work
+    const geo = new THREE.IcosahedronGeometry(1.5, 18);
 
     const pal0 = PAL.default;
     const uniforms = {
@@ -344,21 +344,34 @@ export default function BlobIcon({
     const blob = new THREE.Mesh(geo, mat);
     scene.add(blob);
 
-    // ── Render loop ────────────────────────────────────────────────
+    // ── Render loop — capped at 30fps, paused when off-screen ──────
     let startTs: number | null = null;
+    let lastRender = 0;
     let rafId  = 0;
     let alive  = true;
+    let visible = true;
+    const TARGET_MS = 1000 / 30; // 30fps cap — halves GPU load vs 60fps
+
+    // Pause rendering when the orb scrolls off-screen
+    const observer = new IntersectionObserver(
+      ([entry]) => { visible = entry.isIntersecting; },
+      { threshold: 0 }
+    );
+    observer.observe(container);
 
     const frame = (ts: number) => {
       if (!alive) return;
       rafId = requestAnimationFrame(frame);
+      if (!visible) return;                      // paused — off-screen
+      if (ts - lastRender < TARGET_MS) return;  // throttle to 30fps
+      lastRender = ts;
+
       if (startTs === null) startTs = ts;
       const sec = (ts - startTs) * 0.001;
 
       const { pulse: p, mood: m, streamRate: sr } = propsRef.current;
       const pal = PAL[m] || PAL.default;
 
-      // Pulse mode: faster displacement speed
       const displace = 0.22 + (p ? 0.05 : 0) + sr * 0.04;
       uniforms.uTime.value     = sec;
       uniforms.uDisplace.value = displace;
@@ -367,7 +380,6 @@ export default function BlobIcon({
       uniforms.uBright.value.set(...pal.bright);
       uniforms.uHigh.value.set(...pal.high);
 
-      // Exact rotation speed from meta-orb source
       blob.rotation.y = sec * 0.12;
       blob.rotation.x = Math.sin(sec * 0.15) * 0.12;
 
@@ -380,6 +392,7 @@ export default function BlobIcon({
     return () => {
       alive = false;
       cancelAnimationFrame(rafId);
+      observer.disconnect();
       renderer.dispose();
       geo.dispose();
       mat.dispose();
