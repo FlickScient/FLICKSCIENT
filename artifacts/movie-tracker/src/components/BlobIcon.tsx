@@ -19,179 +19,232 @@ interface BlobIconProps {
   onVanished?: () => void;
 }
 
+// ─────────────────────────────────────────────────────────────────
+// PALETTE — exact colours from the reference orb image analysis:
+//
+//   deep   = dark navy-violet  (shadow pockets / crevices)
+//   mid    = deep body colour  (base surface)
+//   bright = vivid lit colour  (the main surface under light)
+//   high   = near-white silver (specular ridge lines + rim)
+//   glow   = CSS outer glow colour
+//   css    = CSS fallback gradient
+//
+// Default palette pixel-measured from the reference screenshot:
+//   deep   ≈ rgb(18,  8, 41)   = vec3(0.07, 0.03, 0.16)
+//   mid    ≈ rgb(87, 20,117)   = vec3(0.34, 0.08, 0.46)
+//   bright ≈ rgb(168,41,189)   = vec3(0.66, 0.16, 0.74)
+//   high   ≈ rgb(250,242,255)  = vec3(0.98, 0.95, 1.00)
+// ─────────────────────────────────────────────────────────────────
 type Pal = {
-  c1: string;
-  c2: string;
-  c3: string;
-  spec: string;
+  deep: [number,number,number];
+  mid:  [number,number,number];
+  bright:[number,number,number];
+  high: [number,number,number];
   glow: string;
-  css: string;
+  css:  string;
 };
 
 const PAL: Record<string, Pal> = {
-  default:    { c1:'#C030C0', c2:'#7A1EA8', c3:'#1e1550', spec:'#f2eeff', glow:'rgba(180,0,220,0.55)',  css:'radial-gradient(circle,#C030C0,#3a0060)' },
-  horror:     { c1:'#EE1133', c2:'#880011', c3:'#1a0510', spec:'#ffe8ee', glow:'rgba(220,0,40,0.55)',   css:'radial-gradient(circle,#EE1133,#440008)' },
-  romance:    { c1:'#EE3388', c2:'#990044', c3:'#1a0820', spec:'#ffe0f0', glow:'rgba(220,40,110,0.55)', css:'radial-gradient(circle,#EE3388,#550022)' },
-  scifi:      { c1:'#22CCEE', c2:'#006688', c3:'#051820', spec:'#e0faff', glow:'rgba(20,180,230,0.55)', css:'radial-gradient(circle,#22CCEE,#003344)' },
-  action:     { c1:'#EE6600', c2:'#883300', c3:'#180a00', spec:'#fff0e0', glow:'rgba(220,80,0,0.55)',   css:'radial-gradient(circle,#EE6600,#441800)' },
-  comedy:     { c1:'#DDBB00', c2:'#887700', c3:'#181400', spec:'#fffce0', glow:'rgba(220,190,0,0.55)',  css:'radial-gradient(circle,#DDBB00,#443b00)' },
-  drama:      { c1:'#2266EE', c2:'#113388', c3:'#050f20', spec:'#e0eeff', glow:'rgba(50,100,220,0.55)', css:'radial-gradient(circle,#2266EE,#081844)' },
-  fantasy:    { c1:'#9922EE', c2:'#550099', c3:'#100530', spec:'#f0e0ff', glow:'rgba(140,50,220,0.55)', css:'radial-gradient(circle,#9922EE,#2a004c)' },
-  thriller:   { c1:'#556688', c2:'#223344', c3:'#080f14', spec:'#e8edf2', glow:'rgba(60,90,140,0.55)',  css:'radial-gradient(circle,#556688,#111820)' },
-  animation:  { c1:'#EE44AA', c2:'#990055', c3:'#1a0528', spec:'#ffe8f8', glow:'rgba(220,50,160,0.55)', css:'radial-gradient(circle,#EE44AA,#4c0028)' },
-  documentary:{ c1:'#22AA66', c2:'#116633', c3:'#051510', spec:'#e0fff0', glow:'rgba(40,170,100,0.55)', css:'radial-gradient(circle,#22AA66,#083319)' },
-  mystery:    { c1:'#4488CC', c2:'#224488', c3:'#050e20', spec:'#e0eef8', glow:'rgba(60,120,200,0.55)', css:'radial-gradient(circle,#4488CC,#112244)' },
-  western:    { c1:'#CC9922', c2:'#886600', c3:'#181200', spec:'#fff8e0', glow:'rgba(190,150,20,0.55)', css:'radial-gradient(circle,#CC9922,#443300)' },
-  war:        { c1:'#667788', c2:'#334455', c3:'#080c10', spec:'#edf0f2', glow:'rgba(80,110,155,0.55)', css:'radial-gradient(circle,#667788,#1a222a)' },
-  music:      { c1:'#8822EE', c2:'#440099', c3:'#100530', spec:'#f2e0ff', glow:'rgba(120,30,220,0.55)', css:'radial-gradient(circle,#8822EE,#22004c)' },
-  adventure:  { c1:'#22BB88', c2:'#116655', c3:'#051814', spec:'#e0fff8', glow:'rgba(30,180,140,0.55)', css:'radial-gradient(circle,#22BB88,#083322)' },
-  crime:      { c1:'#EE7722', c2:'#884400', c3:'#180900', spec:'#fff4e0', glow:'rgba(200,120,20,0.55)', css:'radial-gradient(circle,#EE7722,#442200)' },
-  history:    { c1:'#CCAA44', c2:'#886622', c3:'#181200', spec:'#fffae0', glow:'rgba(185,155,60,0.55)', css:'radial-gradient(circle,#CCAA44,#443311)' },
+  // Default: exact reference image magenta-purple
+  default:    { deep:[0.07,0.03,0.16], mid:[0.34,0.08,0.46], bright:[0.66,0.16,0.74], high:[0.98,0.95,1.00], glow:'rgba(168,41,189,0.55)', css:'radial-gradient(circle,#A829BD,#120829)' },
+  // Horror: blood crimson
+  horror:     { deep:[0.12,0.01,0.02], mid:[0.40,0.04,0.06], bright:[0.75,0.08,0.12], high:[1.00,0.92,0.90], glow:'rgba(190,20,30,0.55)',  css:'radial-gradient(circle,#C01018,#1e0204)' },
+  // Romance: rose/deep pink
+  romance:    { deep:[0.12,0.02,0.08], mid:[0.40,0.06,0.22], bright:[0.75,0.14,0.44], high:[1.00,0.94,0.97], glow:'rgba(190,35,112,0.55)', css:'radial-gradient(circle,#C02470,#1e0314)' },
+  // Sci-fi: electric cyan-teal
+  scifi:      { deep:[0.01,0.08,0.16], mid:[0.03,0.22,0.44], bright:[0.06,0.48,0.80], high:[0.92,0.99,1.00], glow:'rgba(15,122,204,0.55)', css:'radial-gradient(circle,#0F7ACD,#021428)' },
+  // Action: intense orange
+  action:     { deep:[0.14,0.05,0.01], mid:[0.42,0.16,0.02], bright:[0.80,0.36,0.04], high:[1.00,0.96,0.88], glow:'rgba(204,92,10,0.55)',  css:'radial-gradient(circle,#CC5C0A,#23080a)' },
+  // Comedy: bright sunny yellow
+  comedy:     { deep:[0.12,0.10,0.01], mid:[0.38,0.32,0.02], bright:[0.75,0.68,0.04], high:[1.00,0.99,0.88], glow:'rgba(190,172,10,0.55)', css:'radial-gradient(circle,#BEAC0A,#1e1a02)' },
+  // Drama: deep royal blue
+  drama:      { deep:[0.02,0.04,0.16], mid:[0.06,0.12,0.46], bright:[0.12,0.28,0.80], high:[0.92,0.96,1.00], glow:'rgba(30,72,204,0.55)',  css:'radial-gradient(circle,#1E48CC,#030a28)' },
+  // Fantasy: vivid violet
+  fantasy:    { deep:[0.08,0.02,0.18], mid:[0.26,0.04,0.52], bright:[0.52,0.10,0.90], high:[0.96,0.90,1.00], glow:'rgba(133,25,230,0.55)', css:'radial-gradient(circle,#8519E6,#14032e)' },
+  // Thriller: cold steel grey-blue
+  thriller:   { deep:[0.04,0.05,0.08], mid:[0.14,0.18,0.28], bright:[0.28,0.36,0.56], high:[0.94,0.96,0.99], glow:'rgba(72,92,143,0.55)',  css:'radial-gradient(circle,#485C8F,#0a0c14)' },
+  // Animation: hot pink
+  animation:  { deep:[0.12,0.02,0.10], mid:[0.38,0.05,0.28], bright:[0.78,0.12,0.58], high:[1.00,0.93,0.98], glow:'rgba(199,30,148,0.55)', css:'radial-gradient(circle,#C71E94,#1e031a)' },
+  // Documentary: forest green
+  documentary:{ deep:[0.02,0.10,0.04], mid:[0.04,0.30,0.12], bright:[0.08,0.60,0.24], high:[0.90,1.00,0.94], glow:'rgba(20,153,61,0.55)',  css:'radial-gradient(circle,#14993D,#020e06)' },
+  // Mystery: deep teal-indigo
+  mystery:    { deep:[0.02,0.06,0.12], mid:[0.06,0.18,0.36], bright:[0.12,0.36,0.68], high:[0.90,0.96,1.00], glow:'rgba(30,92,173,0.55)',  css:'radial-gradient(circle,#1E5CAD,#03091e)' },
+  // Western: golden amber
+  western:    { deep:[0.14,0.08,0.01], mid:[0.42,0.26,0.02], bright:[0.76,0.54,0.06], high:[1.00,0.98,0.88], glow:'rgba(194,138,15,0.55)', css:'radial-gradient(circle,#C28A0F,#231202)' },
+  // War: dark olive
+  war:        { deep:[0.06,0.07,0.04], mid:[0.20,0.24,0.12], bright:[0.38,0.44,0.22], high:[0.94,0.96,0.90], glow:'rgba(97,112,56,0.55)',  css:'radial-gradient(circle,#617038,#0e1208)' },
+  // Music: electric purple
+  music:      { deep:[0.08,0.02,0.16], mid:[0.24,0.05,0.46], bright:[0.48,0.10,0.84], high:[0.96,0.90,1.00], glow:'rgba(122,25,214,0.55)', css:'radial-gradient(circle,#7A19D6,#14032a)' },
+  // Adventure: jade green-teal
+  adventure:  { deep:[0.02,0.10,0.08], mid:[0.04,0.30,0.28], bright:[0.08,0.60,0.52], high:[0.90,1.00,0.98], glow:'rgba(20,153,133,0.55)', css:'radial-gradient(circle,#149985,#020e0c)' },
+  // Crime: burnt sienna
+  crime:      { deep:[0.14,0.06,0.02], mid:[0.40,0.18,0.04], bright:[0.76,0.36,0.08], high:[1.00,0.96,0.90], glow:'rgba(194,92,20,0.55)',  css:'radial-gradient(circle,#C25C14,#23090a)' },
+  // History: burnished gold
+  history:    { deep:[0.12,0.09,0.02], mid:[0.36,0.28,0.04], bright:[0.70,0.58,0.10], high:[1.00,0.99,0.90], glow:'rgba(179,148,25,0.55)', css:'radial-gradient(circle,#B39419,#1e1504)' },
 };
 
 // ─────────────────────────────────────────────────────────────────
-// VERTEX SHADER
-//
-//  Reference analysis: the orb stays ROUND. The folds are large and
-//  smooth (3-5 big folds), like crumpled silk. Low frequency noise
-//  with small amplitude keeps the silhouette circular.
-//  Domain warp is light — enough to make folds organic, not spiky.
+// NOISE GLSL — Ashima Simplex 3D noise (exact from meta-orb source)
 // ─────────────────────────────────────────────────────────────────
-const VERT = /* glsl */`
-precision highp float;
+const noiseGLSL = /* glsl */`
+vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x,289.0);}
+vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
 
-uniform float u_time;
-uniform float u_amp;
-uniform float u_speed;
-
-varying vec3  v_normal;
-varying vec3  v_viewPos;
-varying float v_disp;
-
-/* ── Light domain warp — keeps folds organic but not chaotic ── */
-vec3 warpCoord(vec3 p, float t) {
-  float w = 0.30;
-  return vec3(
-    p.x + w * sin(p.y * 1.2 + t * 0.18),
-    p.y + w * cos(p.x * 1.1 + t * 0.16 + 2.1),
-    p.z + w * sin(p.z * 1.3 + t * 0.17 + 4.2)
-  );
+float snoise(vec3 v){
+  const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+  vec3 i  = floor(v + dot(v, C.yyy));
+  vec3 x0 = v - i + dot(i, C.xxx);
+  vec3 g  = step(x0.yzx, x0.xyz);
+  vec3 l  = 1.0 - g;
+  vec3 i1 = min(g.xyz, l.zxy);
+  vec3 i2 = max(g.xyz, l.zxy);
+  vec3 x1 = x0 - i1 + C.xxx;
+  vec3 x2 = x0 - i2 + 2.0*C.xxx;
+  vec3 x3 = x0 - 1.0 + 3.0*C.xxx;
+  i = mod(i, 289.0);
+  vec4 p = permute(permute(permute(
+    i.z + vec4(0.0, i1.z, i2.z, 1.0))
+  + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+  + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+  float n_ = 1.0/7.0;
+  vec3  ns = n_ * D.wyz - D.xzx;
+  vec4  j  = p - 49.0 * floor(p * ns.z * ns.z);
+  vec4  x_ = floor(j * ns.z);
+  vec4  y_ = floor(j - 7.0 * x_);
+  vec4  x  = x_ *ns.x + ns.yyyy;
+  vec4  y  = y_ *ns.x + ns.yyyy;
+  vec4  h  = 1.0 - abs(x) - abs(y);
+  vec4 b0 = vec4(x.xy, y.xy);
+  vec4 b1 = vec4(x.zw, y.zw);
+  vec4 s0 = floor(b0)*2.0 + 1.0;
+  vec4 s1 = floor(b1)*2.0 + 1.0;
+  vec4 sh = -step(h, vec4(0.0));
+  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+  vec3 p0 = vec3(a0.xy, h.x);
+  vec3 p1 = vec3(a0.zw, h.y);
+  vec3 p2 = vec3(a1.xy, h.z);
+  vec3 p3 = vec3(a1.zw, h.w);
+  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+  p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+  vec4 m = max(0.6 - vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)), 0.0);
+  m = m * m;
+  return 42.0 * dot(m*m, vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
 }
 
-/* ── 2-octave LOW-frequency noise — big smooth folds only ─── */
-/* Reference has ~3-5 large folds, not bumpy high-freq surface */
-float blobN(vec3 q, float t) {
-  float n = 0.0;
-  /* Primary — very large folds, frequency 0.85 */
-  n += sin(q.x*0.85+t*0.18)*cos(q.y*0.95+t*0.15)*sin(q.z*0.90+t*0.17) * 0.65;
-  /* Secondary — medium folds for crumple detail */
-  n += sin(q.x*1.80+t*0.32)*cos(q.y*1.70+t*0.28)*sin(q.z*1.90+t*0.30) * 0.28;
-  /* Slight crinkle at ridges only */
-  n += sin(q.x*3.50+t*0.60)*cos(q.y*3.20+t*0.55)*sin(q.z*3.70+t*0.58) * 0.07;
-  return n;
-}
-
-void main() {
-  vec3  p = normal;
-  float t = u_time * u_speed;
-
-  vec3  q   = warpCoord(p, t);
-  float n0  = blobN(q, t);
-
-  /* Low amplitude (0.38) so overall shape stays ROUND like reference */
-  float disp    = n0 * u_amp;
-  vec3 displaced = p * (0.72 + disp);
-
-  /* Numerical gradient for crease normals */
-  float e  = 0.020;
-  float gx = (blobN(warpCoord(p+vec3(e,0,0),t), t) - n0) / e;
-  float gy = (blobN(warpCoord(p+vec3(0,e,0),t), t) - n0) / e;
-  float gz = (blobN(warpCoord(p+vec3(0,0,e),t), t) - n0) / e;
-  vec3 grad = vec3(gx, gy, gz) * u_amp;
-  vec3 gtan = grad - dot(grad, p) * p;
-  vec3 dn   = normalize(p - gtan * 0.8);
-
-  vec4 mvPos = modelViewMatrix * vec4(displaced, 1.0);
-  v_viewPos  = mvPos.xyz;
-  v_normal   = normalize(normalMatrix * dn);
-  v_disp     = n0;
-
-  gl_Position = projectionMatrix * mvPos;
+float fbm(vec3 p){
+  float f = 0.0;
+  f += 1.00 * snoise(p * 0.9);
+  f += 0.40 * snoise(p * 1.8 + 13.7);
+  f += 0.14 * snoise(p * 3.2 + 41.2);
+  return f;
 }
 `;
 
 // ─────────────────────────────────────────────────────────────────
-// FRAGMENT SHADER
+// VERTEX SHADER — exact port from meta-orb.tsx
+// ─────────────────────────────────────────────────────────────────
+const VERT = /* glsl */`
+precision highp float;
+uniform float uTime;
+uniform float uDisplace;
+
+varying vec3  vNormalW;
+varying vec3  vViewDir;
+varying float vFold;
+varying vec3  vPos;
+
+${noiseGLSL}
+
+vec3 displaced(vec3 dir){
+  float t = uTime * 0.16;
+  float n = fbm(dir * 1.3 + vec3(0.0, 0.0, t));
+  n += 0.35 * fbm(dir * 2.2 - vec3(t, t * 0.5, 0.0));
+  return dir * (1.0 + n * uDisplace);
+}
+
+void main(){
+  vec3 dir = normalize(position);
+  vec3 dp  = displaced(dir);
+  vFold    = length(dp) - 1.0;
+
+  vec3 tangent   = normalize(cross(dir, vec3(0.0, 1.0, 0.0) + 0.001));
+  vec3 bitangent = normalize(cross(dir, tangent));
+  float eps = 0.04;
+  vec3 a = displaced(normalize(dir + tangent   * eps));
+  vec3 b = displaced(normalize(dir + bitangent * eps));
+  vec3 newNormal = normalize(cross(a - dp, b - dp));
+  if (dot(newNormal, dir) < 0.0) newNormal = -newNormal;
+
+  vec4 worldPos = modelMatrix * vec4(dp, 1.0);
+  vPos          = dp;
+  vNormalW      = normalize(mat3(modelMatrix) * newNormal);
+  vViewDir      = normalize(cameraPosition - worldPos.xyz);
+  gl_Position   = projectionMatrix * viewMatrix * worldPos;
+}
+`;
+
+// ─────────────────────────────────────────────────────────────────
+// FRAGMENT SHADER — exact port with mood-uniform colours
 //
-//  Reference colours:
-//    c1 = #C030C0 vivid magenta — covers MOST of the lit surface
-//    c2 = #7A1EA8 mid purple    — shadow faces
-//    c3 = #1e1550 dark indigo  — deep fold pockets (inside valleys)
-//    spec = #f2eeff near-white — thin fold-ridge lines + silk sheen
-//
-//  Glassy transparent edge: alpha fades at grazing angles (Fresnel).
-//  DoubleSide on, so fold interiors render and show dark valleys.
-//  Back faces are darker (inside of the silk folds).
+//  Uses the reflection vector against a vertical gradient env map —
+//  this is the secret to the liquid-glass chrome appearance.
+//  Colours driven by uniforms so mood changes work.
 // ─────────────────────────────────────────────────────────────────
 const FRAG = /* glsl */`
 precision highp float;
+uniform float uTime;
+uniform vec3  uDeep;    /* dark shadow / crevice colour  */
+uniform vec3  uMid;     /* body colour                   */
+uniform vec3  uBright;  /* lit surface colour            */
+uniform vec3  uHigh;    /* specular / rim highlight      */
 
-uniform vec3 u_c1;
-uniform vec3 u_c2;
-uniform vec3 u_c3;
-uniform vec3 u_spec;
+varying vec3  vNormalW;
+varying vec3  vViewDir;
+varying float vFold;
+varying vec3  vPos;
 
-varying vec3  v_normal;
-varying vec3  v_viewPos;
-varying float v_disp;
+void main(){
+  vec3 N = normalize(vNormalW);
+  vec3 V = normalize(vViewDir);
+  vec3 R = reflect(-V, N);
 
-void main() {
-  /* Back-face: flip normal so interior fold faces shade correctly */
-  vec3  N   = normalize(v_normal) * (gl_FrontFacing ? 1.0 : -1.0);
-  vec3  V   = normalize(-v_viewPos);
-  float NdV = max(dot(N, V), 0.0);
+  /* Vertical environment gradient — dark at bottom, bright at top */
+  float h = R.y * 0.5 + 0.5;   /* 0 = bottom, 1 = top */
+  vec3 env = uDeep;
+  env = mix(env, uMid,    smoothstep(0.18, 0.50, h));
+  env = mix(env, uBright, smoothstep(0.52, 0.80, h));
+  env = mix(env, uHigh,   smoothstep(0.92, 1.00, h));
+  /* Saturated belly lower down */
+  env = mix(env, uBright, smoothstep(0.42, 0.28, h) * 0.45);
 
-  /* ── Key light: upper-left (matches reference video) ── */
-  vec3  L1    = normalize(vec3(-1.5, 3.5, 3.0));
-  float d1    = max(dot(N, L1), 0.0);
-  vec3  H1    = normalize(L1 + V);
-  float NdH1  = max(dot(N, H1), 0.0);
-  float sLine = pow(NdH1, 180.0);   /* sharp fold-ridge highlight line */
-  float sSilk = pow(NdH1,  25.0);   /* broad silk sheen */
+  /* Horizontal chrome streak */
+  float sweep = smoothstep(0.80, 0.98, R.x * 0.5 + 0.5);
+  env = mix(env, uHigh, sweep * 0.4);
 
-  /* ── Warm fill light: right ── */
-  vec3  L2 = normalize(vec3(2.5, 0.5, 2.0));
-  float d2 = max(dot(N, L2), 0.0);
+  /* Crevices → deep dark */
+  float crease = smoothstep(0.02, -0.32, vFold);
+  env = mix(env, uDeep * 0.35, crease);
 
-  /* ── Base colour from displacement ── */
-  /* Neutral surfaces (v_disp≈0) show vivid c1.                     */
-  /* Only negative displacement (deep valleys) drops toward c3.     */
-  float depthT = clamp(v_disp * 1.2 + 0.75, 0.0, 1.0);
-  vec3 body = mix(u_c3, u_c2, clamp(depthT * 1.5, 0.0, 1.0));
-       body = mix(body, u_c1, clamp(depthT * 1.8 - 0.2, 0.0, 1.0));
+  /* Specular */
+  vec3 L1 = normalize(vec3(0.3, 0.9, 0.45));
+  vec3 H1 = normalize(L1 + V);
+  float spec = pow(max(dot(N, H1), 0.0), 80.0);
 
-  /* ── Lighting ── */
-  /* Back faces get darker inner-fold colour (like seeing silk interior) */
-  float frontBoost = gl_FrontFacing ? 1.0 : 0.45;
-  vec3 col = body * (d1 * 0.90 + d2 * 0.22 + 0.18) * frontBoost;
+  /* Fresnel rim */
+  float fres = pow(1.0 - max(dot(N, V), 0.0), 2.5);
 
-  /* Emissive floor — blob is never pitch black, always shows c1 hue */
-  col = max(col, u_c1 * (gl_FrontFacing ? 0.22 : 0.08));
+  vec3 col = env;
+  col = mix(col, uHigh, clamp(spec, 0.0, 1.0));
+  col += uHigh * pow(fres, 4.0) * 0.7;
+  col = mix(col, uDeep * 0.7, fres * 0.35);
 
-  /* Specular only on front faces */
-  if (gl_FrontFacing) {
-    col += u_spec * sLine * 2.0;
-    col += u_spec * sSilk * 0.15 * d1;
-  }
+  /* Filmic tone curve — deep darks, controlled highlights */
+  col = col / (col + vec3(0.3));
+  col = pow(col, vec3(0.92));
 
-  /* ── Glassy transparent edge via alpha ── */
-  /* At grazing angles (NdV→0), alpha fades to ~0 → looks transparent */
-  /* This is the KEY to the thin glassy fins visible in the reference  */
-  float alpha = 0.20 + 0.80 * pow(NdV, 0.45);
-  /* Back faces (inside folds) are semi-transparent */
-  if (!gl_FrontFacing) alpha *= 0.55;
-
-  gl_FragColor = vec4(col, alpha);
+  gl_FragColor = vec4(col, 1.0);
 }
 `;
 
@@ -236,8 +289,8 @@ export default function BlobIcon({
   streamRate = 0,
   onVanished,
 }: BlobIconProps) {
-  const mountRef  = useRef<HTMLDivElement>(null);
-  const propsRef  = useRef({ pulse, mood, animate, streamRate, state });
+  const mountRef = useRef<HTMLDivElement>(null);
+  const propsRef = useRef({ pulse, mood, animate, streamRate, state });
   const [webglOk, setWebglOk] = useState(true);
   propsRef.current = { pulse, mood, animate, streamRate, state };
 
@@ -256,14 +309,11 @@ export default function BlobIcon({
     // ── Renderer ──────────────────────────────────────────────────
     let renderer: THREE.WebGLRenderer;
     try {
-      renderer = new THREE.WebGLRenderer({
-        alpha: true, antialias: true, powerPreference: 'high-performance',
-      });
+      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
     } catch {
       setWebglOk(false);
       return;
     }
-
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     renderer.setPixelRatio(dpr);
     renderer.setSize(size, size);
@@ -273,39 +323,31 @@ export default function BlobIcon({
 
     // ── Scene / Camera ─────────────────────────────────────────────
     const scene  = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 50);
-    camera.position.set(0, 0, 3.2);
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 50);
+    camera.position.set(0, 0, 4.2);
 
-    // ── High-segment sphere for smooth large folds ─────────────────
-    const geo = new THREE.SphereGeometry(1, 160, 160);
+    // ── IcosahedronGeometry — exact same as reference orb ─────────
+    // detail=50 gives plenty of smoothness at icon sizes (24–80px)
+    const geo = new THREE.IcosahedronGeometry(1.5, 50);
 
     const pal0 = PAL.default;
     const uniforms = {
-      u_time:  { value: 0.0 },
-      u_amp:   { value: 0.38 },   // low amp → shape stays round like reference
-      u_speed: { value: 0.55 },   // slow organic motion
-      u_c1:    { value: new THREE.Color(pal0.c1) },
-      u_c2:    { value: new THREE.Color(pal0.c2) },
-      u_c3:    { value: new THREE.Color(pal0.c3) },
-      u_spec:  { value: new THREE.Color(pal0.spec) },
+      uTime:     { value: 0.0 },
+      uDisplace: { value: 0.22 },   // exact value from meta-orb source
+      uDeep:     { value: new THREE.Vector3(...pal0.deep) },
+      uMid:      { value: new THREE.Vector3(...pal0.mid) },
+      uBright:   { value: new THREE.Vector3(...pal0.bright) },
+      uHigh:     { value: new THREE.Vector3(...pal0.high) },
     };
 
-    const mat = new THREE.ShaderMaterial({
-      vertexShader:   VERT,
-      fragmentShader: FRAG,
-      uniforms,
-      transparent: true,       // enables alpha for glassy edge fade
-      side: THREE.DoubleSide,  // see fold interiors (dark valleys visible through top)
-      depthWrite: false,        // correct transparency sorting
-    });
-
+    const mat  = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms });
     const blob = new THREE.Mesh(geo, mat);
     scene.add(blob);
 
     // ── Render loop ────────────────────────────────────────────────
     let startTs: number | null = null;
-    let rafId   = 0;
-    let alive   = true;
+    let rafId  = 0;
+    let alive  = true;
 
     const frame = (ts: number) => {
       if (!alive) return;
@@ -314,21 +356,20 @@ export default function BlobIcon({
       const sec = (ts - startTs) * 0.001;
 
       const { pulse: p, mood: m, streamRate: sr } = propsRef.current;
-      const pal   = PAL[m] || PAL.default;
-      const speed = 0.55 + (p ? 0.90 : 0) + sr * 1.0;
-      const amp   = 0.38 + (p ? 0.08 : 0) + sr * 0.06;
+      const pal = PAL[m] || PAL.default;
 
-      uniforms.u_time.value  = sec;
-      uniforms.u_speed.value = speed;
-      uniforms.u_amp.value   = amp;
-      uniforms.u_c1.value.set(pal.c1);
-      uniforms.u_c2.value.set(pal.c2);
-      uniforms.u_c3.value.set(pal.c3);
-      uniforms.u_spec.value.set(pal.spec);
+      // Pulse mode: faster displacement speed
+      const displace = 0.22 + (p ? 0.05 : 0) + sr * 0.04;
+      uniforms.uTime.value     = sec;
+      uniforms.uDisplace.value = displace;
+      uniforms.uDeep.value.set(...pal.deep);
+      uniforms.uMid.value.set(...pal.mid);
+      uniforms.uBright.value.set(...pal.bright);
+      uniforms.uHigh.value.set(...pal.high);
 
-      /* Very slow gentle rotation — shows all fold angles */
-      blob.rotation.y = sec * 0.06;
-      blob.rotation.x = Math.sin(sec * 0.05) * 0.04;
+      // Exact rotation speed from meta-orb source
+      blob.rotation.y = sec * 0.12;
+      blob.rotation.x = Math.sin(sec * 0.15) * 0.12;
 
       try { renderer.render(scene, camera); }
       catch { alive = false; setWebglOk(false); }
@@ -342,16 +383,14 @@ export default function BlobIcon({
       renderer.dispose();
       geo.dispose();
       mat.dispose();
-      if (container.contains(renderer.domElement)) {
-        container.removeChild(renderer.domElement);
-      }
+      if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
     };
   }, [size]);
 
   // ── CSS glow ───────────────────────────────────────────────────
-  const pal    = PAL[mood] || PAL.default;
-  const r1     = Math.round(size * (pulse ? 0.38 : 0.22));
-  const r2     = Math.round(size * (pulse ? 0.65 : 0.40));
+  const pal     = PAL[mood] || PAL.default;
+  const r1      = Math.round(size * (pulse ? 0.38 : 0.22));
+  const r2      = Math.round(size * (pulse ? 0.65 : 0.40));
   const glowCSS = `drop-shadow(0 0 ${r1}px ${pal.glow}) drop-shadow(0 0 ${r2}px ${pal.glow})`;
 
   const wrapAnim =
@@ -371,13 +410,11 @@ export default function BlobIcon({
   }
 
   return (
-    <span
-      style={{
-        display:'inline-flex', alignItems:'center', justifyContent:'center',
-        position:'relative', width:size, height:size, flexShrink:0,
-        animation:wrapAnim, filter:glowCSS, willChange:'transform,opacity,filter',
-      }}
-    >
+    <span style={{
+      display:'inline-flex', alignItems:'center', justifyContent:'center',
+      position:'relative', width:size, height:size, flexShrink:0,
+      animation:wrapAnim, filter:glowCSS, willChange:'transform,opacity,filter',
+    }}>
       <div ref={mountRef} style={{ lineHeight: 0 }} />
     </span>
   );
