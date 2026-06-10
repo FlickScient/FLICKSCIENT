@@ -155,10 +155,10 @@ void main() {
 const FRAG = /* glsl */`
 precision highp float;
 
-uniform vec3 u_c1;    /* vivid warm magenta-purple — lit surface      */
-uniform vec3 u_c2;    /* mid purple — shadow-side faces               */
-uniform vec3 u_c3;    /* dark indigo — deep pockets + edge blend      */
-uniform vec3 u_spec;  /* near-white lavender — fold-ridge highlights  */
+uniform vec3 u_c1;    /* vivid warm magenta-purple — main surface colour */
+uniform vec3 u_c2;    /* mid purple                                       */
+uniform vec3 u_c3;    /* dark indigo — deepest pockets + edge             */
+uniform vec3 u_spec;  /* near-white — fold-ridge specular                 */
 
 varying vec3  v_normal;
 varying vec3  v_viewPos;
@@ -167,50 +167,39 @@ varying float v_disp;
 void main() {
   vec3  N   = normalize(v_normal);
   vec3  V   = normalize(-v_viewPos);
-  float NdV = max(dot(N,V), 0.0);
+  float NdV = max(dot(N, V), 0.0);
 
-  /* ── Key light: upper-LEFT-front (measured from all video frames) */
-  vec3  L1   = normalize(vec3(-2.0, 4.0, 3.5));
-  float d1   = max(dot(N,L1), 0.0);
-  vec3  H1   = normalize(L1+V);
-  float NdH1 = max(dot(N,H1), 0.0);
-  /* Razor fold-ridge line + broad silk sheen (two-lobe specular) */
-  float s1sharp = pow(NdH1, 220.0);  /* thin bright ridge lines    */
-  float s1soft  = pow(NdH1,  38.0);  /* wide silk sheen            */
+  /* ── Key light: upper-left-front (from video analysis) ── */
+  vec3  L1  = normalize(vec3(-1.8, 3.8, 3.5));
+  float d1  = max(dot(N, L1), 0.0);
+  vec3  H1  = normalize(L1 + V);
+  float spec1 = pow(max(dot(N,H1),0.0), 160.0);  /* fold-ridge line  */
+  float spec2 = pow(max(dot(N,H1),0.0),  30.0);  /* broad silk sheen */
 
-  /* ── Soft fill light: right side, warms shadow areas ── */
-  vec3  L2 = normalize(vec3(3.0, 0.5, 1.5));
-  float d2 = max(dot(N,L2), 0.0);
+  /* ── Fill light: soft right ── */
+  vec3  L2 = normalize(vec3(3.0, 0.5, 2.0));
+  float d2 = max(dot(N, L2), 0.0);
 
-  /* ── Displacement-based colour ramp ───────────────────────────── */
-  /* Shifted offsets so neutral surfaces show the vivid c1 colour,  */
-  /* only deep concave pockets drop toward c3 (dark indigo).        */
-  float t1  = clamp(v_disp * 2.2 + 0.80, 0.0, 1.0);   /* c3 → c2 */
-  float t2  = clamp(v_disp * 2.8 + 0.62, 0.0, 1.0);   /* c2 → c1 */
-  vec3 body = mix(u_c3, u_c2, t1);
-       body = mix(body, u_c1, t2);
-  /* Boost fold crests toward spec colour */
-  body = mix(body, u_spec * 0.75, clamp((v_disp - 0.45)*4.0, 0.0, 1.0));
+  /* ── Surface colour: vivid magenta by default, dark only in deep pockets */
+  /* Use lighting + displacement together to drive colour                   */
+  float lit    = d1 * 0.85 + d2 * 0.20;          /* 0 = unlit, 1 = fully lit */
+  float depthT = clamp(v_disp * 1.5 + 0.7, 0.0, 1.0); /* 0=deep valley, 1=crest */
+  float bright = clamp(lit * 0.7 + depthT * 0.5, 0.0, 1.0);
 
-  /* ── Lighting ─────────────────────────────────────────────────── */
-  vec3 ambient  = u_c2 * 0.32;                    /* mid-purple ambient keeps shadows vivid */
-  vec3 diffuse  = body * (d1*0.88 + d2*0.28);
-  vec3 specular = u_spec * s1sharp * 2.2           /* bright ridge lines  */
-                + u_spec * 0.45 * s1soft * 0.42;   /* soft silk sheen     */
+  /* Base colour — vivid c1 on lit crests, c3 only in deep dark pockets */
+  vec3 col = mix(u_c3, u_c2, depthT);
+       col = mix(col,  u_c1, clamp(bright, 0.0, 1.0));
 
-  vec3 col = ambient + diffuse + specular;
+  /* Emissive floor: minimum 28% of vivid c1 so blob is never pitch-black */
+  col = max(col, u_c1 * 0.28);
 
-  /* ── GLASSY EDGE: Fresnel blends to c3 (background indigo)       */
-  /* Lighter blend target + weaker strength = colour visible at edge */
-  float fr = pow(1.0 - NdV, 2.6);
-  col = mix(col, u_c3 * 0.80, fr * 0.68);
+  /* Specular highlights */
+  col += u_spec * spec1 * 1.8;
+  col += u_spec * spec2 * 0.18;
 
-  /* ── AO proxy — gentle, keeps vivid colour in mid-depth areas ─── */
-  float ao = clamp(v_disp * 1.8 + 0.62, 0.0, 1.0);
-  col *= (0.76 + 0.24 * ao);
-
-  /* ── Blue-indigo shift only in deepest concave areas ────────────  */
-  col = mix(col, col * vec3(0.70, 0.65, 1.35), clamp((-v_disp)*1.5, 0.0, 0.35));
+  /* Fresnel glassy edge — blends toward c3 (dark indigo background colour) */
+  float fr = pow(1.0 - NdV, 2.8);
+  col = mix(col, u_c3, fr * 0.60);
 
   gl_FragColor = vec4(col, 1.0);
 }
