@@ -1,0 +1,1 @@
+- [FlickScient design system](design-system.md) — gold #EAB308, dark #0a0a0f, card #0d0d14, Cinzel serif headings via inline style only (Tailwind v4 can't set custom font families via class).

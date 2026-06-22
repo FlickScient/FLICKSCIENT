@@ -1593,34 +1593,49 @@ function StatsPage({ movies }) {
   const favIndustry = Object.entries(indWatched).sort((a,b)=>b[1]-a[1])[0]?.[0];
   const favIndInfo  = INDUSTRIES.find(i=>i.label===favIndustry);
 
+  const cardStyle = { background: '#0d0d14', border: '1px solid rgba(234,179,8,0.12)', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' };
+  const sectionLabel = (text: string) => (
+    <p style={{ fontFamily: "'Cinzel', serif", fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.25em', color: 'rgba(234,179,8,0.5)', fontWeight: 700, marginBottom: 16 }}>{text}</p>
+  );
+
   if (total === 0) return (
-    <div className="min-h-screen bg-[#0a0a0c] text-white flex items-center justify-center p-6 pb-28">
+    <div className="min-h-screen flex items-center justify-center p-6 pb-28" style={{ background: '#0a0a0f' }}>
       <div className="text-center">
-        <BarChart2 size={48} className="text-gray-800 mx-auto mb-4" />
-        <p className="text-gray-600 text-sm">No data yet</p>
-        <p className="text-gray-700 text-xs mt-1">Add films to your library to see stats</p>
+        <BarChart2 size={48} className="mx-auto mb-4" style={{ color: 'rgba(234,179,8,0.2)' }} />
+        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>No data yet</p>
+        <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.2)' }}>Add films to your library to see stats</p>
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-[#0a0a0c] text-white pb-28">
-      <div className="pt-10 pb-5 px-5 bg-[#0f0f13] border-b border-white/5">
-        <p className="text-[9px] uppercase tracking-[0.35em] text-gray-500">The Ultimate Canon</p>
-        <h1 className="text-2xl font-black mt-0.5">Your Stats</h1>
-        <p className="text-[9px] text-gray-700 mt-0.5">by <span className="text-yellow-800 font-bold">Mahmudul Hasan Mahid</span></p>
+    <div className="min-h-screen text-white pb-28" style={{ background: '#0a0a0f' }}>
+      {/* Header */}
+      <div className="pt-10 pb-5 px-5 border-b" style={{ background: '#0d0d14', borderColor: 'rgba(234,179,8,0.12)' }}>
+        <p style={{ fontSize: '0.52rem', textTransform: 'uppercase', letterSpacing: '0.3em', color: 'rgba(234,179,8,0.4)', fontFamily: "'Cinzel', serif" }}>The Ultimate Canon</p>
+        <h1 style={{ fontFamily: "'Cinzel', serif", fontWeight: 700, fontSize: '1.4rem', color: '#fff', letterSpacing: '0.04em', marginTop: 4, lineHeight: 1.1 }}>Your Stats</h1>
+        <p className="text-[9px] mt-1" style={{ color: 'rgba(255,255,255,0.2)' }}>by <span style={{ color: 'rgba(234,179,8,0.55)', fontWeight: 700 }}>Mahmudul Hasan Mahid</span></p>
       </div>
 
-      <div className="px-4 pt-5 space-y-5">
+      <div className="px-4 pt-5 space-y-4">
         {/* Progress ring */}
-        <div className="bg-[#111116] rounded-3xl border border-white/5 p-5">
-          <p className="text-[10px] uppercase tracking-widest text-gray-600 font-black mb-4">Overall Progress</p>
+        <div className="rounded-3xl p-5" style={cardStyle}>
+          {sectionLabel('Overall Progress')}
           <div className="flex items-center gap-6">
             <CircularProgress pct={pct} label="done" sublabel={`${watched.length}/${total}`} />
             <div className="flex-1 space-y-3">
-              <div><div className="text-2xl font-black text-white">{watched.length}</div><div className="text-[9px] text-gray-600 uppercase tracking-wider">Films Watched</div></div>
-              <div><div className="text-lg font-black text-blue-400">{watchlist.length}</div><div className="text-[9px] text-gray-600 uppercase tracking-wider">In Watchlist</div></div>
-              <div><div className="text-lg font-black text-yellow-500">{watchHours}h <span className="text-sm font-bold text-amber-600/70">· {watchDays}d</span></div><div className="text-[9px] text-gray-600 uppercase tracking-wider">Est. Watch Time</div></div>
+              <div>
+                <div className="text-2xl font-black text-white">{watched.length}</div>
+                <div className="text-[9px] uppercase tracking-wider mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>Films Watched</div>
+              </div>
+              <div>
+                <div className="text-lg font-black text-blue-400">{watchlist.length}</div>
+                <div className="text-[9px] uppercase tracking-wider mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>In Watchlist</div>
+              </div>
+              <div>
+                <div className="text-lg font-black" style={{ color: '#EAB308' }}>{watchHours}h <span className="text-sm font-bold" style={{ color: 'rgba(234,179,8,0.5)' }}>· {watchDays}d</span></div>
+                <div className="text-[9px] uppercase tracking-wider mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>Est. Watch Time</div>
+              </div>
             </div>
           </div>
         </div>
@@ -1632,37 +1647,37 @@ function StatsPage({ movies }) {
             { icon:'⭐', val: rated.length,      label:'Rated' },
             { icon:'🏆', val:`${unlocked}/${achievements.length}`, label:'Achievements' },
           ].map(f => (
-            <div key={f.label} className="bg-[#111116] rounded-2xl border border-white/5 p-4 text-center">
+            <div key={f.label} className="rounded-2xl p-4 text-center" style={cardStyle}>
               <div className="text-xl mb-1">{f.icon}</div>
               <div className="text-lg font-black text-white">{f.val}</div>
-              <div className="text-[9px] text-gray-600 uppercase tracking-wider mt-0.5">{f.label}</div>
+              <div className="text-[9px] uppercase tracking-wider mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>{f.label}</div>
             </div>
           ))}
         </div>
 
         {/* Taste */}
         {(favGenre || favIndustry) && (
-          <div className="bg-[#111116] rounded-3xl border border-white/5 p-5">
-            <p className="text-[10px] uppercase tracking-widest text-gray-600 font-black mb-3">Your Taste</p>
+          <div className="rounded-3xl p-5" style={cardStyle}>
+            {sectionLabel('Your Taste')}
             <div className="flex gap-3">
               {favGenre && (
-                <div className="flex-1 bg-[#1c1c26] rounded-2xl p-3 text-center">
+                <div className="flex-1 rounded-2xl p-3 text-center" style={{ background: '#1a1a24' }}>
                   <div className="text-2xl mb-1">{GENRE_ICONS[favGenre]||'🎬'}</div>
                   <div className="text-xs font-black text-white">{favGenre}</div>
-                  <div className="text-[9px] text-gray-600 mt-0.5">Top Genre</div>
+                  <div className="text-[9px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>Top Genre</div>
                 </div>
               )}
               {favIndustry && (
-                <div className="flex-1 bg-[#1c1c26] rounded-2xl p-3 text-center">
+                <div className="flex-1 rounded-2xl p-3 text-center" style={{ background: '#1a1a24' }}>
                   <div className="text-2xl mb-1">{favIndInfo?.flag||'🌍'}</div>
                   <div className="text-xs font-black text-white">{favIndustry}</div>
-                  <div className="text-[9px] text-gray-600 mt-0.5">Top Industry</div>
+                  <div className="text-[9px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>Top Industry</div>
                 </div>
               )}
-              <div className="flex-1 bg-[#1c1c26] rounded-2xl p-3 text-center">
+              <div className="flex-1 rounded-2xl p-3 text-center" style={{ background: '#1a1a24' }}>
                 <div className="text-2xl mb-1">{movies.filter(m=>m.type==='Movie').length > movies.filter(m=>m.type==='Series').length ? '🎬' : '📺'}</div>
                 <div className="text-xs font-black text-white">{movies.filter(m=>m.type==='Movie').length > movies.filter(m=>m.type==='Series').length ? 'Movies' : 'Series'}</div>
-                <div className="text-[9px] text-gray-600 mt-0.5">Preference</div>
+                <div className="text-[9px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>Preference</div>
               </div>
             </div>
           </div>
@@ -1670,19 +1685,25 @@ function StatsPage({ movies }) {
 
         {/* Genre breakdown */}
         {topGenres.length > 0 && (
-          <div className="bg-[#111116] rounded-3xl border border-white/5 p-5">
-            <p className="text-[10px] uppercase tracking-widest text-gray-600 font-black mb-4">By Genre</p>
+          <div className="rounded-3xl p-5" style={cardStyle}>
+            {sectionLabel('By Genre')}
             <div className="space-y-3">
               {topGenres.map(({genre,total:t,done}) => {
                 const p = Math.round((done/t)*100);
                 return (
                   <div key={genre}>
                     <div className="flex justify-between items-center mb-1">
-                      <div className="flex items-center gap-2"><span className="text-sm">{GENRE_ICONS[genre]||'🎬'}</span><span className="text-xs font-bold text-gray-300">{genre}</span></div>
-                      <div className="text-right"><span className="text-xs text-gray-500">{done}/{t}</span><span className="text-[10px] text-yellow-600 font-bold ml-2">{p}%</span></div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">{GENRE_ICONS[genre]||'🎬'}</span>
+                        <span className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.75)' }}>{genre}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>{done}/{t}</span>
+                        <span className="text-[10px] font-bold ml-2" style={{ color: '#EAB308' }}>{p}%</span>
+                      </div>
                     </div>
-                    <div className="w-full h-1.5 bg-[#1c1c26] rounded-full overflow-hidden">
-                      <div className="h-full bg-yellow-500 rounded-full transition-all duration-700" style={{width:`${p}%`}} />
+                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: '#1c1c28' }}>
+                      <div className="h-full rounded-full transition-all duration-700" style={{ width:`${p}%`, background: 'linear-gradient(90deg, #EAB308, #fde047)', boxShadow: '0 0 6px rgba(234,179,8,0.4)' }} />
                     </div>
                   </div>
                 );
@@ -1693,8 +1714,8 @@ function StatsPage({ movies }) {
 
         {/* Industry breakdown */}
         {topIndustries.length > 0 && (
-          <div className="bg-[#111116] rounded-3xl border border-white/5 p-5">
-            <p className="text-[10px] uppercase tracking-widest text-gray-600 font-black mb-4">By Industry</p>
+          <div className="rounded-3xl p-5" style={cardStyle}>
+            {sectionLabel('By Industry')}
             <div className="space-y-3">
               {topIndustries.map(({ind,total:t,done}) => {
                 const p    = Math.round((done/t)*100);
@@ -1703,10 +1724,16 @@ function StatsPage({ movies }) {
                 return (
                   <div key={ind}>
                     <div className="flex justify-between items-center mb-1">
-                      <div className="flex items-center gap-2"><span className="text-sm">{info?.flag||'🌍'}</span><span className="text-xs font-bold text-gray-300">{ind}</span></div>
-                      <div className="text-right"><span className="text-xs text-gray-500">{done}/{t}</span><span className="text-[10px] font-bold ml-2" style={{color}}>{p}%</span></div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">{info?.flag||'🌍'}</span>
+                        <span className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.75)' }}>{ind}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>{done}/{t}</span>
+                        <span className="text-[10px] font-bold ml-2" style={{color}}>{p}%</span>
+                      </div>
                     </div>
-                    <div className="w-full h-1.5 bg-[#1c1c26] rounded-full overflow-hidden">
+                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: '#1c1c28' }}>
                       <div className="h-full rounded-full transition-all duration-700" style={{width:`${p}%`,backgroundColor:color}} />
                     </div>
                   </div>
@@ -1718,14 +1745,14 @@ function StatsPage({ movies }) {
 
         {/* Rating distribution */}
         {rated.length > 0 && (
-          <div className="bg-[#111116] rounded-3xl border border-white/5 p-5">
-            <p className="text-[10px] uppercase tracking-widest text-gray-600 font-black mb-4">Your Ratings</p>
+          <div className="rounded-3xl p-5" style={cardStyle}>
+            {sectionLabel('Your Ratings')}
             <div className="flex items-end gap-2 h-20">
               {ratingDist.map(({stars,count}) => (
                 <div key={stars} className="flex-1 flex flex-col items-center gap-1">
-                  <span className="text-[9px] text-gray-500 font-bold">{count}</span>
-                  <div className="w-full rounded-t-lg bg-yellow-500/20 relative overflow-hidden" style={{height:`${Math.max((count/maxRatingCount)*56,count>0?4:0)}px`}}>
-                    <div className="absolute bottom-0 left-0 right-0 bg-yellow-500 rounded-t-lg" style={{height:'100%'}} />
+                  <span className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>{count}</span>
+                  <div className="w-full rounded-t-lg relative overflow-hidden" style={{ height:`${Math.max((count/maxRatingCount)*56,count>0?4:0)}px`, background: 'rgba(234,179,8,0.15)' }}>
+                    <div className="absolute bottom-0 left-0 right-0 rounded-t-lg" style={{ height:'100%', background: 'linear-gradient(0deg, #EAB308, #fde047)' }} />
                   </div>
                   <div className="flex">{Array.from({length:stars}).map((_,i) => <Star key={i} size={7} fill="#EAB308" stroke="none" />)}</div>
                 </div>
@@ -1736,18 +1763,18 @@ function StatsPage({ movies }) {
 
         {/* Top Rated */}
         {topRated.length > 0 && (
-          <div className="bg-[#111116] rounded-3xl border border-white/5 p-5">
-            <p className="text-[10px] uppercase tracking-widest text-gray-600 font-black mb-4">🏆 Your Top Rated</p>
+          <div className="rounded-3xl p-5" style={cardStyle}>
+            {sectionLabel('🏆 Your Top Rated')}
             <div className="space-y-3">
               {topRated.map((m,i) => (
                 <div key={m.id} className="flex items-center gap-3">
-                  <span className="text-sm font-black text-gray-700 w-5">#{i+1}</span>
+                  <span className="text-sm font-black w-5" style={{ color: 'rgba(234,179,8,0.4)' }}>#{i+1}</span>
                   {m.poster ? <img src={m.poster} className="w-10 h-14 object-cover rounded-xl flex-shrink-0" alt="" />
-                    : <div className="w-10 h-14 bg-[#1c1c26] rounded-xl flex-shrink-0 flex items-center justify-center"><Film size={14} className="text-gray-700" /></div>}
+                    : <div className="w-10 h-14 rounded-xl flex-shrink-0 flex items-center justify-center" style={{ background: '#1c1c28' }}><Film size={14} style={{ color: 'rgba(234,179,8,0.2)' }} /></div>}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold truncate">{m.title}</p>
-                    <p className="text-[10px] text-gray-600">{m.year} · {m.type}</p>
-                    <div className="flex gap-0.5 mt-0.5">{[1,2,3,4,5].map(s => <Star key={s} size={10} fill={s<=m.rating?'#EAB308':'none'} stroke={s<=m.rating?'#EAB308':'#374151'} strokeWidth={1.5} />)}</div>
+                    <p className="text-sm font-bold truncate text-white">{m.title}</p>
+                    <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{m.year} · {m.type}</p>
+                    <div className="flex gap-0.5 mt-0.5">{[1,2,3,4,5].map(s => <Star key={s} size={10} fill={s<=m.rating?'#EAB308':'none'} stroke={s<=m.rating?'#EAB308':'#2d2d3a'} strokeWidth={1.5} />)}</div>
                   </div>
                   {INDUSTRIES.find(ind=>ind.label===m.industry)?.flag && <span className="text-lg">{INDUSTRIES.find(ind=>ind.label===m.industry).flag}</span>}
                 </div>
@@ -1757,37 +1784,49 @@ function StatsPage({ movies }) {
         )}
 
         {/* Achievements */}
-        <div className="bg-[#111116] rounded-3xl border border-white/5 p-5">
-          <p className="text-[10px] uppercase tracking-widest text-gray-600 font-black mb-1">Achievements</p>
-          <p className="text-xs text-gray-600 mb-4">{unlocked} of {achievements.length} unlocked</p>
+        <div className="rounded-3xl p-5" style={cardStyle}>
+          {sectionLabel('Achievements')}
+          <p className="text-xs mb-4" style={{ color: 'rgba(255,255,255,0.3)', marginTop: -10 }}>{unlocked} of {achievements.length} unlocked</p>
           <div className="grid grid-cols-2 gap-2">
             {achievements.map(a => (
-              <div key={a.label} className={`flex items-center gap-2.5 rounded-2xl p-3 border transition-all ${
-                a.unlocked ? 'bg-yellow-500/10 border-yellow-500/30' : 'bg-[#1c1c26] border-white/5 opacity-40'
-              }`}>
+              <div key={a.label}
+                className="flex items-center gap-2.5 rounded-2xl p-3 transition-all"
+                style={ a.unlocked
+                  ? { background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.25)' }
+                  : { background: '#1a1a24', border: '1px solid rgba(255,255,255,0.04)', opacity: 0.4 }
+                }>
                 <span className="text-xl">{a.icon}</span>
-                <div><p className="text-[11px] font-black text-white">{a.label}</p><p className="text-[9px] text-gray-500">{a.desc}</p></div>
+                <div>
+                  <p className="text-[11px] font-black text-white">{a.label}</p>
+                  <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{a.desc}</p>
+                </div>
               </div>
             ))}
           </div>
         </div>
 
         {/* Movies vs Series */}
-        <div className="bg-[#111116] rounded-3xl border border-white/5 p-5 mb-2">
-          <p className="text-[10px] uppercase tracking-widest text-gray-600 font-black mb-4">Movies vs Series</p>
+        <div className="rounded-3xl p-5 mb-2" style={cardStyle}>
+          {sectionLabel('Movies vs Series')}
           {(() => {
             const mv = movies.filter(m=>m.type==='Movie').length;
             const sv = movies.filter(m=>m.type==='Series').length;
             const mvPct = total > 0 ? Math.round((mv/total)*100) : 50;
             return (
               <div>
-                <div className="flex rounded-full overflow-hidden h-4 mb-3">
-                  <div className="bg-yellow-500 transition-all" style={{width:`${mvPct}%`}} />
-                  <div className="bg-blue-600 flex-1" />
+                <div className="flex rounded-full overflow-hidden h-3 mb-3" style={{ background: '#1c1c28' }}>
+                  <div className="transition-all" style={{ width:`${mvPct}%`, background: 'linear-gradient(90deg, #EAB308, #fde047)' }} />
+                  <div className="flex-1 bg-blue-600" />
                 </div>
                 <div className="flex justify-between text-xs">
-                  <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block" /><span className="text-gray-400">Movies <b className="text-white">{mv}</b></span></div>
-                  <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block" /><span className="text-gray-400">Series <b className="text-white">{sv}</b></span></div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#EAB308' }} />
+                    <span style={{ color: 'rgba(255,255,255,0.5)' }}>Movies <b className="text-white">{mv}</b></span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block" />
+                    <span style={{ color: 'rgba(255,255,255,0.5)' }}>Series <b className="text-white">{sv}</b></span>
+                  </div>
                 </div>
               </div>
             );
@@ -1850,15 +1889,16 @@ function LibraryPage({ movies, onToggle, onDelete, onRate, onLogout, onOpenSeed,
     return 0;
   });
 
-  const Chip = ({ active, onClick, children, activeClass = 'bg-yellow-500 text-black' }) => (
+  const Chip = ({ active, onClick, children, activeClass = 'bg-[#EAB308] text-black' }) => (
     <button onClick={onClick}
-      className={`px-3.5 py-1 rounded-xl text-[11px] font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
-        active ? activeClass : 'bg-[#1c1c26] text-gray-400 border border-white/10 hover:text-gray-200'
-      }`}>{children}</button>
+      className={`px-3.5 py-1 rounded-xl text-[11px] font-semibold whitespace-nowrap transition-all flex-shrink-0 ${active ? activeClass : ''}`}
+      style={active ? {} : { background: '#0d0d14', color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(234,179,8,0.14)' }}>
+      {children}
+    </button>
   );
 
   return (
-    <div className="min-h-screen bg-[#0a0a0c] text-white pb-28">
+    <div className="min-h-screen text-white pb-28" style={{ background: '#0a0a0f' }}>
       {/* Detail Modal */}
       {selectedMovie && (
         <MovieDetailModal
@@ -1883,129 +1923,131 @@ function LibraryPage({ movies, onToggle, onDelete, onRate, onLogout, onOpenSeed,
         />
       )}
 
-      {/* Header */}
-      <div className="pt-10 pb-6 px-5 bg-[#0f0f13] border-b border-white/5">
-        <div className="flex justify-between items-start mb-1">
+      {/* ── Header ── */}
+      <div className="pt-10 pb-5 px-5 border-b" style={{ background: '#0d0d14', borderColor: 'rgba(234,179,8,0.12)' }}>
+        <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-3">
-            <button onClick={onOpenDrawer}
-              className="w-9 h-9 rounded-2xl bg-[#1c1c26] border border-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors">
-              <Menu size={18} />
+            <button onClick={onOpenDrawer} className="p-1 rounded-xl transition-opacity hover:opacity-70">
+              <img src="/favicon.svg" width={36} height={36} alt="logo" />
             </button>
             <div>
-              <p className="text-[9px] uppercase tracking-[0.35em] text-gray-500">The Ultimate Canon</p>
-              <h1 className="text-2xl font-black mt-0.5">Masterpiece Tracker</h1>
-              <p className="text-[9px] text-gray-700 mt-0.5">by <span className="text-yellow-800 font-bold">Mahmudul Hasan Mahid</span></p>
+              <h1 style={{ fontFamily: "'Cinzel', serif", fontWeight: 700, fontSize: '1.2rem', letterSpacing: '0.03em', color: '#fff', lineHeight: 1.1 }}>
+                Movie<span style={{ color: '#EAB308' }}>Sync</span>
+              </h1>
+              <p style={{ fontSize: '0.52rem', textTransform: 'uppercase', letterSpacing: '0.28em', color: 'rgba(234,179,8,0.45)', fontFamily: "'Cinzel', serif", marginTop: 2 }}>
+                The Ultimate Canon
+              </p>
             </div>
           </div>
-          {/* Profile Avatar */}
           <button onClick={onOpenDrawer}
-            className="w-10 h-10 rounded-full bg-yellow-500 flex items-center justify-center text-black text-base font-black flex-shrink-0 mt-1 hover:bg-yellow-400 transition-colors">
+            className="w-10 h-10 rounded-full flex items-center justify-center text-black text-sm font-black flex-shrink-0 transition-all hover:scale-105 active:scale-95"
+            style={{ background: 'linear-gradient(135deg, #EAB308 0%, #ca9a07 100%)', boxShadow: '0 0 16px rgba(234,179,8,0.4)' }}>
             {initials}
           </button>
         </div>
 
         {/* Stats row */}
-        <div className="flex gap-6 mt-5 mb-4">
+        <div className="flex gap-5 mb-4">
           {[
             { val: watchedFirst, total: first100.length || 100, label: 'First 100' },
             { val: watchedNext,  total: next100.length  || 100, label: 'Next 100' },
             { val: watched,      total,                          label: 'Total' },
           ].map(s => (
             <div key={s.label} className="text-center">
-              <div className="text-xl font-black text-yellow-500">
-                {s.val}<span className="text-xs font-normal text-gray-500">/{s.total}</span>
+              <div className="text-xl font-black" style={{ color: '#EAB308', textShadow: '0 0 10px rgba(234,179,8,0.45)' }}>
+                {s.val}<span className="text-xs font-normal" style={{ color: 'rgba(255,255,255,0.25)' }}>/{s.total}</span>
               </div>
-              <div className="text-[8px] uppercase tracking-widest text-gray-600 mt-0.5">{s.label}</div>
+              <div className="text-[8px] uppercase tracking-widest mt-0.5" style={{ color: 'rgba(255,255,255,0.25)' }}>{s.label}</div>
             </div>
           ))}
           <div className="text-center ml-auto">
             <div className="text-xl font-black text-blue-400">{watchlistCnt}</div>
-            <div className="text-[8px] uppercase tracking-widest text-gray-600 mt-0.5">Watchlist</div>
+            <div className="text-[8px] uppercase tracking-widest mt-0.5" style={{ color: 'rgba(255,255,255,0.25)' }}>Watchlist</div>
           </div>
         </div>
 
-        <div className="flex justify-between text-[9px] text-gray-600 mb-1.5">
+        <div className="flex justify-between text-[9px] mb-1.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
           <span>{watched} watched</span>
-          <span className="text-yellow-600 font-black">{pct}%</span>
+          <span style={{ color: '#EAB308', fontWeight: 800 }}>{pct}%</span>
           <span>{total - watched} remaining</span>
         </div>
-        <div className="w-full h-1.5 bg-[#1c1c26] rounded-full overflow-hidden">
-          <div className="h-full bg-yellow-500 rounded-full transition-all duration-500" style={{width:`${pct}%`}} />
+        <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: '#1c1c2a' }}>
+          <div className="h-full rounded-full transition-all duration-700"
+            style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #EAB308, #fde047)', boxShadow: '0 0 8px rgba(234,179,8,0.55)' }} />
         </div>
       </div>
 
-      {/* Sticky filters */}
-      <div className="sticky top-0 z-40 bg-[#0a0a0c]/95 backdrop-blur-md pt-3 pb-2 border-b border-white/5">
+      {/* ── Sticky Filters ── */}
+      <div className="sticky top-0 z-40 backdrop-blur-md pt-3 pb-2 border-b" style={{ background: 'rgba(10,10,15,0.96)', borderColor: 'rgba(234,179,8,0.08)' }}>
         <div className="px-4 mb-2 flex gap-2">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-3 text-gray-600" size={15} />
+            <Search className="absolute left-3 top-3" size={15} style={{ color: 'rgba(255,255,255,0.25)' }} />
             <input type="text" placeholder="Search library..." value={libSearch} onChange={e => setLibSearch(e.target.value)}
-              className="w-full bg-[#111116] pl-9 pr-4 py-3 rounded-2xl border border-white/5 outline-none focus:border-yellow-500/40 text-sm transition-colors" />
+              className="w-full pl-9 pr-4 py-3 rounded-2xl border outline-none text-sm text-white transition-all"
+              style={{ background: '#0d0d14', borderColor: 'rgba(234,179,8,0.15)', caretColor: '#EAB308' }}
+              onFocus={e => { e.currentTarget.style.borderColor = 'rgba(234,179,8,0.5)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(234,179,8,0.08)'; }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'rgba(234,179,8,0.15)'; e.currentTarget.style.boxShadow = 'none'; }} />
           </div>
           <div className="relative">
             <button onClick={() => setShowSort(s => !s)}
-              className={`h-full px-3 rounded-2xl border flex items-center gap-1 ${
-                sortBy !== 'added' ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-500' : 'bg-[#111116] border-white/5 text-gray-500'
-              }`}>
+              className="h-full px-3 rounded-2xl border flex items-center gap-1 transition-all"
+              style={{ background: sortBy !== 'added' ? 'rgba(234,179,8,0.1)' : '#0d0d14', borderColor: sortBy !== 'added' ? 'rgba(234,179,8,0.4)' : 'rgba(234,179,8,0.15)', color: sortBy !== 'added' ? '#EAB308' : 'rgba(255,255,255,0.3)' }}>
               <SlidersHorizontal size={15} />
             </button>
             {showSort && (
-              <div className="absolute right-0 top-full mt-2 bg-[#1c1c26] border border-white/10 rounded-2xl overflow-hidden shadow-2xl w-36 z-50">
+              <div className="absolute right-0 top-full mt-2 rounded-2xl overflow-hidden shadow-2xl w-36 z-50" style={{ background: '#0d0d14', border: '1px solid rgba(234,179,8,0.2)' }}>
                 {SORT_OPTIONS.map(o => (
                   <button key={o.value} onClick={() => { setSortBy(o.value); setShowSort(false); }}
-                    className={`w-full text-left px-4 py-2.5 text-xs font-bold transition-colors ${
-                      sortBy === o.value ? 'text-yellow-500 bg-yellow-500/10' : 'text-gray-400 hover:text-white hover:bg-white/5'
-                    }`}>{o.label}</button>
+                    className="w-full text-left px-4 py-2.5 text-xs font-bold transition-colors"
+                    style={{ color: sortBy === o.value ? '#EAB308' : 'rgba(255,255,255,0.4)', background: sortBy === o.value ? 'rgba(234,179,8,0.08)' : 'transparent' }}>
+                    {o.label}
+                  </button>
                 ))}
               </div>
             )}
           </div>
           <button onClick={() => window.scrollTo({top:0,behavior:'smooth'})}
-            className="h-full px-3 rounded-2xl border border-white/5 bg-[#111116] text-gray-500 hover:text-white flex items-center">
+            className="h-full px-3 rounded-2xl border flex items-center transition-all hover:opacity-70"
+            style={{ background: '#0d0d14', borderColor: 'rgba(234,179,8,0.15)', color: 'rgba(255,255,255,0.3)' }}>
             <ArrowUp size={15} />
           </button>
         </div>
 
-        {/* Status filter + media type */}
+        {/* Status + media type */}
         <div className="px-4 flex gap-2 overflow-x-auto scrollbar-hide mb-2">
           <Chip active={statusFilter==='all'}       onClick={() => setStatusFilter('all')}>All</Chip>
           <Chip active={statusFilter==='watched'}   onClick={() => setStatusFilter('watched')}>✓ Watched</Chip>
           <Chip active={statusFilter==='watchlist'} onClick={() => setStatusFilter('watchlist')} activeClass="bg-blue-600 text-white">🔖 Watchlist</Chip>
           <Chip active={statusFilter==='unwatched'} onClick={() => setStatusFilter('unwatched')}>Unwatched</Chip>
           <Chip active={statusFilter==='favorites'} onClick={() => setStatusFilter('favorites')}>❤️ Faves</Chip>
-          <div className="w-px h-5 bg-white/10 self-center mx-1 flex-shrink-0" />
-          <Chip active={mediaTypeFilter==='all'}   onClick={() => setMediaTypeFilter('all')}   activeClass="bg-[#2c2c3a] text-white border border-white/20">All</Chip>
-          <Chip active={mediaTypeFilter==='movie'} onClick={() => setMediaTypeFilter('movie')} activeClass="bg-[#2c2c3a] text-white border border-white/20">🎬 Movies</Chip>
-          <Chip active={mediaTypeFilter==='tv'}    onClick={() => setMediaTypeFilter('tv')}    activeClass="bg-[#2c2c3a] text-white border border-white/20">📺 Series</Chip>
+          <div className="w-px h-5 self-center mx-1 flex-shrink-0" style={{ background: 'rgba(234,179,8,0.15)' }} />
+          <Chip active={mediaTypeFilter==='all'}   onClick={() => setMediaTypeFilter('all')}   activeClass="bg-[#2c2c3a] text-white">All</Chip>
+          <Chip active={mediaTypeFilter==='movie'} onClick={() => setMediaTypeFilter('movie')} activeClass="bg-[#2c2c3a] text-white">🎬 Movies</Chip>
+          <Chip active={mediaTypeFilter==='tv'}    onClick={() => setMediaTypeFilter('tv')}    activeClass="bg-[#2c2c3a] text-white">📺 Series</Chip>
         </div>
 
-        {/* Industry multi-filter */}
+        {/* Industry */}
         <div className="px-4 flex gap-2 overflow-x-auto scrollbar-hide mb-2">
           {ALL_INDUSTRIES.map(ind => {
             const info   = INDUSTRIES.find(i => i.label === ind);
             const active = activeIndustries.includes(ind);
             return (
-              <Chip key={ind} active={active} onClick={() => toggleInd(ind)}
-                activeClass="bg-yellow-500 text-black">
+              <Chip key={ind} active={active} onClick={() => toggleInd(ind)} activeClass="bg-[#EAB308] text-black">
                 {info?.flag ? `${info.flag} ${ind}` : ind}
               </Chip>
             );
           })}
-          {activeIndustries.length > 0 && (
-            <Chip active={false} onClick={() => setActiveIndustries([])}>✕ Clear</Chip>
-          )}
+          {activeIndustries.length > 0 && <Chip active={false} onClick={() => setActiveIndustries([])}>✕ Clear</Chip>}
         </div>
 
-        {/* Genre multi-filter */}
+        {/* Genre */}
         <div className="px-4 flex gap-2 overflow-x-auto scrollbar-hide">
           {ALL_GENRES.map(g => (
             <Chip key={g} active={activeGenres.includes(g)} onClick={() => toggleGenre(g)}>
               {GENRE_ICONS[g]||''} {g}
             </Chip>
           ))}
-          {activeGenres.length > 0 && (
-            <Chip active={false} onClick={() => setActiveGenres([])}>✕ Clear</Chip>
-          )}
+          {activeGenres.length > 0 && <Chip active={false} onClick={() => setActiveGenres([])}>✕ Clear</Chip>}
         </div>
       </div>
 
@@ -2032,7 +2074,7 @@ function LibraryPage({ movies, onToggle, onDelete, onRate, onLogout, onOpenSeed,
           </div>
         )}
 
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {filtered.map((movie) => {
             const rankNum = movies.indexOf(movie) + 1;
             const indInfo = INDUSTRIES.find(i => i.label === movie.industry);
@@ -2043,18 +2085,24 @@ function LibraryPage({ movies, onToggle, onDelete, onRate, onLogout, onOpenSeed,
 
             return (
               <div key={movie.id}
-                className="flex bg-[#111116] rounded-2xl border border-white/[0.05] overflow-hidden cursor-pointer hover:border-yellow-500/20 transition-all active:scale-[0.99]"
+                className="flex rounded-2xl overflow-hidden cursor-pointer transition-all active:scale-[0.99]"
+                style={{ background: '#0d0d14', border: '1px solid rgba(234,179,8,0.08)', boxShadow: '0 2px 12px rgba(0,0,0,0.4)' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(234,179,8,0.28)'; e.currentTarget.style.boxShadow = '0 0 20px rgba(234,179,8,0.07), 0 2px 12px rgba(0,0,0,0.4)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(234,179,8,0.08)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.4)'; }}
                 onClick={() => setSelectedMovie(movie)}>
+                {/* Poster */}
                 <div className="w-16 flex-shrink-0 relative">
                   {movie.poster
                     ? <img src={movie.poster} alt={movie.title} className="w-full h-full object-cover" style={{minHeight:96}} />
-                    : <div className="w-full h-full min-h-[96px] bg-[#1c1c26] flex items-center justify-center"><Film size={20} className="text-gray-700" /></div>
+                    : <div className="w-full h-full min-h-[96px] flex items-center justify-center" style={{ background: '#1c1c28' }}>
+                        <Film size={20} style={{ color: 'rgba(234,179,8,0.2)' }} />
+                      </div>
                   }
-                  <div className="absolute top-1 left-1 bg-black/70 rounded-md px-1 py-0.5">
+                  <div className="absolute top-1 left-1 rounded-md px-1 py-0.5" style={{ background: 'rgba(0,0,0,0.75)' }}>
                     <span className="text-[9px] text-gray-400 font-mono">{rankNum}</span>
                   </div>
                   {isWatchlist && (
-                    <div className="absolute bottom-1 left-1 bg-blue-600/80 rounded-md px-1 py-0.5">
+                    <div className="absolute bottom-1 left-1 rounded-md px-1 py-0.5" style={{ background: 'rgba(37,99,235,0.8)' }}>
                       <Bookmark size={8} className="text-white" fill="white" />
                     </div>
                   )}
@@ -2062,24 +2110,24 @@ function LibraryPage({ movies, onToggle, onDelete, onRate, onLogout, onOpenSeed,
 
                 <div className="flex-1 min-w-0 px-3 py-2.5 flex flex-col justify-between">
                   <div>
-                    <h3 className={`font-bold text-sm leading-snug ${isWatched ? 'text-gray-500 line-through' : isWatchlist ? 'text-blue-300' : 'text-white'}`}>
+                    <h3 className={`font-bold text-sm leading-snug ${isWatched ? 'line-through' : ''}`}
+                      style={{ color: isWatched ? 'rgba(255,255,255,0.28)' : isWatchlist ? '#93c5fd' : '#fff' }}>
                       {movie.title}
                     </h3>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      {movie.year && <span className="text-xs text-yellow-600 font-bold">{movie.year}</span>}
-                      {movie.type && <span className="text-[9px] text-gray-600 uppercase tracking-wider">{movie.type}</span>}
+                      {movie.year && <span className="text-xs font-bold" style={{ color: '#EAB308' }}>{movie.year}</span>}
+                      {movie.type && <span className="text-[9px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.28)' }}>{movie.type}</span>}
                       {indInfo && <span className="text-[9px]">{indInfo.flag}</span>}
                       {movie.genre && <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${genreColor(movie.genre)}`}>{movie.genre}</span>}
                     </div>
-                    {/* Episode mini-bar for series */}
                     {movie.type === 'Series' && movie.total_episodes > 0 && (
                       <div className="mt-1.5">
                         <div className="flex justify-between items-center mb-0.5">
-                          <span className="text-[8px] text-gray-600">{movie.episodes_watched||0}/{movie.total_episodes} ep</span>
-                          <span className="text-[8px] text-yellow-600 font-bold">{epPct}%</span>
+                          <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.28)' }}>{movie.episodes_watched||0}/{movie.total_episodes} ep</span>
+                          <span className="text-[8px] font-bold" style={{ color: '#EAB308' }}>{epPct}%</span>
                         </div>
-                        <div className="w-full h-0.5 bg-[#1c1c26] rounded-full overflow-hidden">
-                          <div className="h-full bg-yellow-500 rounded-full" style={{width:`${epPct}%`}} />
+                        <div className="w-full h-0.5 rounded-full overflow-hidden" style={{ background: '#1c1c28' }}>
+                          <div className="h-full rounded-full" style={{ width:`${epPct}%`, background: '#EAB308' }} />
                         </div>
                       </div>
                     )}
@@ -2091,23 +2139,25 @@ function LibraryPage({ movies, onToggle, onDelete, onRate, onLogout, onOpenSeed,
                   <div className="flex items-center gap-2 mt-2" onClick={e => e.stopPropagation()}>
                     {isWatchlist ? (
                       <button onClick={() => onToggle(movie.id, 'watched', false)}
-                        className="flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-lg bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20 transition-all">
+                        className="flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all"
+                        style={{ background: 'rgba(234,179,8,0.1)', color: '#EAB308', border: '1px solid rgba(234,179,8,0.3)' }}>
                         <CheckCircle size={12} /> Mark Watched
                       </button>
                     ) : (
                       <button onClick={() => onToggle(movie.id, 'watched', movie.watched)}
-                        className={`flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all ${
-                          isWatched ? 'bg-green-900/40 text-green-400' : 'bg-[#1c1c26] text-gray-500 hover:text-gray-300'
-                        }`}>
+                        className="flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all"
+                        style={{ background: isWatched ? 'rgba(34,197,94,0.1)' : '#1c1c28', color: isWatched ? '#4ade80' : 'rgba(255,255,255,0.3)', border: `1px solid ${isWatched ? 'rgba(34,197,94,0.25)' : 'transparent'}` }}>
                         <CheckCircle size={12} strokeWidth={2.5} />
                         {isWatched ? 'Watched' : 'Mark Watched'}
                       </button>
                     )}
                     <button onClick={() => onToggle(movie.id, 'favorite', movie.favorite)}
-                      className={`transition-colors ${movie.favorite ? 'text-red-500' : 'text-gray-700 hover:text-gray-500'}`}>
+                      className="transition-colors"
+                      style={{ color: movie.favorite ? '#ef4444' : 'rgba(255,255,255,0.18)' }}>
                       <Heart size={16} fill={movie.favorite ? 'currentColor' : 'none'} />
                     </button>
-                    <button onClick={() => onDelete(movie.id)} className="text-gray-700 hover:text-red-500 transition-colors ml-auto">
+                    <button onClick={() => onDelete(movie.id)} className="ml-auto transition-colors hover:text-red-400"
+                      style={{ color: 'rgba(255,255,255,0.15)' }}>
                       <Trash2 size={15} />
                     </button>
                   </div>
@@ -2214,34 +2264,37 @@ function SeedModal({ onClose, onDone, userId }) {
 // ─── Bottom Nav ───────────────────────────────────────────────────────────────
 function BottomNav({ view, setView }) {
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#0f0f13]/95 backdrop-blur-lg border-t border-white/5">
+    <div className="fixed bottom-0 left-0 right-0 z-50 backdrop-blur-xl border-t"
+      style={{ background: 'rgba(10,10,15,0.97)', borderColor: 'rgba(234,179,8,0.1)', boxShadow: '0 -8px 32px rgba(0,0,0,0.5)' }}>
       <div className="flex items-center justify-around py-2 px-2">
         <button onClick={() => setView('library')}
-          className={`flex flex-col items-center gap-1 px-3 py-2 rounded-2xl transition-all ${view==='library' ? 'text-yellow-500' : 'text-gray-600 hover:text-gray-400'}`}>
+          className="flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all"
+          style={{ color: view==='library' ? '#EAB308' : 'rgba(255,255,255,0.3)' }}>
+          {view==='library' && (
+            <div className="absolute w-8 h-0.5 rounded-full -mt-2" style={{ background: '#EAB308', boxShadow: '0 0 8px rgba(234,179,8,0.8)', position: 'relative', top: -4, left: '50%', transform: 'translateX(-50%)' }} />
+          )}
           <Film size={20} strokeWidth={view==='library'?2.5:1.5} />
-          <span className="text-[9px] font-black uppercase tracking-wider">Library</span>
+          <span className="text-[9px] font-black uppercase tracking-wider" style={{ fontFamily: "'Cinzel', serif", letterSpacing: '0.1em' }}>Library</span>
         </button>
 
         <button onClick={() => setView('flickscient')}
-          className={`flex flex-col items-center gap-1 px-3 py-2 rounded-2xl transition-all ${
-            view==='flickscient'
-              ? 'text-purple-400'
-              : 'text-gray-600 hover:text-purple-400'
-          }`}>
+          className="flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all"
+          style={{ color: view==='flickscient' ? '#a78bfa' : 'rgba(255,255,255,0.3)' }}>
           <BlobIcon size={24} />
-          <span className="text-[9px] font-black uppercase tracking-wider">AI</span>
+          <span className="text-[9px] font-black uppercase tracking-wider" style={{ fontFamily: "'Cinzel', serif", letterSpacing: '0.1em' }}>AI</span>
         </button>
 
         <button onClick={() => setView('search')}
-          className="w-13 h-13 bg-yellow-500 text-black rounded-full flex items-center justify-center shadow-lg shadow-yellow-500/30 hover:bg-yellow-400 transition-all active:scale-95 -mt-5"
-          style={{ width: 52, height: 52 }}>
+          className="rounded-full flex items-center justify-center transition-all active:scale-95 -mt-5"
+          style={{ width: 52, height: 52, background: 'linear-gradient(135deg, #EAB308 0%, #ca9a07 100%)', boxShadow: '0 0 20px rgba(234,179,8,0.5), 0 4px 16px rgba(0,0,0,0.4)', color: '#000' }}>
           <Plus size={24} strokeWidth={2.5} />
         </button>
 
         <button onClick={() => setView('stats')}
-          className={`flex flex-col items-center gap-1 px-3 py-2 rounded-2xl transition-all ${view==='stats' ? 'text-yellow-500' : 'text-gray-600 hover:text-gray-400'}`}>
+          className="flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all"
+          style={{ color: view==='stats' ? '#EAB308' : 'rgba(255,255,255,0.3)' }}>
           <BarChart2 size={20} strokeWidth={view==='stats'?2.5:1.5} />
-          <span className="text-[9px] font-black uppercase tracking-wider">Stats</span>
+          <span className="text-[9px] font-black uppercase tracking-wider" style={{ fontFamily: "'Cinzel', serif", letterSpacing: '0.1em' }}>Stats</span>
         </button>
       </div>
     </div>
@@ -2409,12 +2462,7 @@ useEffect(() => {
         </div>
       )}
       {view === 'flickscient' && (
-        <div key="flickscient" className="view-enter min-h-screen bg-[#0a0a0c] pt-0 pb-20">
-          <div className="pt-10 pb-0 px-5 bg-[#0f0f13] border-b border-white/5">
-            <p className="text-[9px] uppercase tracking-[0.35em] text-gray-500">The Ultimate Canon</p>
-            <h1 className="text-2xl font-black mt-0.5 text-purple-400">FlickScient</h1>
-            <p className="text-[9px] text-gray-700 mt-0.5 pb-4">AI Film Companion · powered by Groq</p>
-          </div>
+        <div key="flickscient" className="view-enter min-h-screen pt-0 pb-20" style={{ background: '#0a0a0f' }}>
           <FlickScient myList={movies} onLibraryUpdate={fetchMovies} />
         </div>
       )}

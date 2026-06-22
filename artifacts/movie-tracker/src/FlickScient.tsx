@@ -890,32 +890,43 @@ if (actionMatches.length === 0) {
     <div className="flex flex-col bg-[#0a0a0c] text-white" style={{ height: 'calc(100vh - 80px)' }}>
 
       {/* Header */}
-      <div className="flex items-center justify-between bg-[#121218] border-b border-white/5 px-4 py-3 flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 flex-shrink-0 border-b"
+        style={{ background: '#0d0d14', borderColor: 'rgba(139,92,246,0.15)' }}>
         <div className="flex items-center gap-2.5">
           <BlobIcon size={80} pulse={isStreaming} mood={currentMood} state={blobState} streamRate={streamRate} />
           <div>
-            <h3 className="font-black text-xs text-purple-400 tracking-[0.15em] uppercase leading-tight">FlickScient</h3>
-            <p className="text-[8px] text-gray-600 font-bold uppercase tracking-wider">Final Boss of Film</p>
+            <h3 style={{ fontFamily: "'Cinzel', serif", fontWeight: 700, fontSize: '0.85rem', color: '#a78bfa', letterSpacing: '0.08em', lineHeight: 1.1 }}>
+              FlickScient
+            </h3>
+            <p style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 700 }}>
+              AI Film Companion
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="flex bg-[#0a0a0c] border border-white/5 rounded-xl p-0.5">
+          <div className="flex rounded-xl p-0.5" style={{ background: '#0a0a0f', border: '1px solid rgba(139,92,246,0.15)' }}>
             <button onClick={() => setAiTab('chat')}
-              className={`px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wide transition-all ${aiTab==='chat' ? 'bg-purple-500/20 text-purple-400' : 'text-gray-600 hover:text-gray-400'}`}>
+              className="px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wide transition-all"
+              style={{ background: aiTab==='chat' ? 'rgba(139,92,246,0.2)' : 'transparent', color: aiTab==='chat' ? '#a78bfa' : 'rgba(255,255,255,0.3)' }}>
               Chat
             </button>
             <button onClick={() => setAiTab('history')}
-              className={`px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wide transition-all flex items-center gap-1 ${aiTab==='history' ? 'bg-amber-500/20 text-amber-400' : 'text-gray-600 hover:text-gray-400'}`}>
+              className="px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wide transition-all flex items-center gap-1"
+              style={{ background: aiTab==='history' ? 'rgba(234,179,8,0.15)' : 'transparent', color: aiTab==='history' ? '#EAB308' : 'rgba(255,255,255,0.3)' }}>
               <Clock size={9} />History
             </button>
             <button onClick={() => setAiTab('sync')}
-              className={`px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wide transition-all flex items-center gap-1 ${aiTab==='sync' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-600 hover:text-gray-400'}`}>
+              className="px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wide transition-all flex items-center gap-1"
+              style={{ background: aiTab==='sync' ? 'rgba(59,130,246,0.15)' : 'transparent', color: aiTab==='sync' ? '#60a5fa' : 'rgba(255,255,255,0.3)' }}>
               <Users size={9} />Sync
             </button>
           </div>
           {aiTab === 'chat' && (
             <button onClick={startNewChat} title="New chat"
-              className="text-gray-600 hover:text-purple-400 p-1.5 rounded-xl transition-all hover:bg-purple-500/10">
+              className="p-1.5 rounded-xl transition-all"
+              style={{ color: 'rgba(255,255,255,0.3)' }}
+              onMouseEnter={e => { (e.target as HTMLElement).style.color = '#a78bfa'; }}
+              onMouseLeave={e => { (e.target as HTMLElement).style.color = 'rgba(255,255,255,0.3)'; }}>
               <Plus size={15} />
             </button>
           )}
@@ -1068,24 +1079,29 @@ if (actionMatches.length === 0) {
         </div>
 
         {/* Mood Pills */}
-        <div className="flex-shrink-0 bg-[#121218] border-t border-white/5 px-3 pt-3 pb-0">
+        <div className="flex-shrink-0 border-t px-3 pt-3 pb-0" style={{ background: '#0d0d14', borderColor: 'rgba(234,179,8,0.1)' }}>
           <div className="flex gap-2 overflow-x-auto pb-3" style={{ scrollbarWidth: 'none' }}>
             {MOOD_PILLS.map(pill => (
               <button key={pill.label} onClick={() => sendMessage(pill.prompt)} disabled={loading}
-                className="flex-shrink-0 flex items-center gap-1.5 bg-amber-950/50 border border-amber-800/40 hover:border-amber-600/50 hover:bg-amber-900/40 text-amber-400 hover:text-amber-200 rounded-full px-3 py-1.5 text-[11px] font-bold transition-all active:scale-95 disabled:opacity-40">
+                className="flex-shrink-0 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold transition-all active:scale-95 disabled:opacity-40"
+                style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)', color: '#EAB308' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(234,179,8,0.15)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(234,179,8,0.45)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(234,179,8,0.08)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(234,179,8,0.2)'; }}>
                 <span>{pill.emoji}</span><span>{pill.label}</span>
               </button>
             ))}
           </div>
         </div>
 
-        {/* Textarea */}
-        <div className="px-4 pb-4 bg-[#121218] flex-shrink-0">
+        {/* Input */}
+        <div className="px-4 pb-4 flex-shrink-0" style={{ background: '#0d0d14' }}>
           <form onSubmit={handleSend} className="relative flex items-end">
             <textarea ref={textareaRef} rows={1}
               placeholder="Challenge me with a vibe, genre, mood…"
-              className="w-full bg-[#0a0a0c] text-white p-4 pr-14 rounded-2xl border border-gray-800 outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all text-[13px] placeholder-gray-600 resize-none overflow-y-auto leading-relaxed"
-              style={{ minHeight: '52px', maxHeight: '120px' }}
+              className="w-full text-white p-4 pr-14 rounded-2xl border outline-none transition-all text-[13px] resize-none overflow-y-auto leading-relaxed"
+              style={{ minHeight: '52px', maxHeight: '120px', background: '#0a0a0f', borderColor: 'rgba(139,92,246,0.25)', caretColor: '#a78bfa', color: '#fff' }}
+              onFocus={e => { e.currentTarget.style.borderColor = 'rgba(139,92,246,0.55)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(139,92,246,0.08)'; }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'rgba(139,92,246,0.25)'; e.currentTarget.style.boxShadow = 'none'; }}
               value={input}
               onChange={e => { setInput(e.target.value); adjustHeight(); }}
               onKeyDown={e => {
@@ -1100,15 +1116,18 @@ if (actionMatches.length === 0) {
               }}
             />
             <button type="submit" disabled={loading || !input.trim() || countdown > 0}
-              className="absolute right-3 bottom-3 text-purple-400 hover:text-purple-300 disabled:opacity-30 transition-all p-2.5 rounded-xl hover:bg-purple-500/10">
+              className="absolute right-3 bottom-3 disabled:opacity-30 transition-all p-2.5 rounded-xl"
+              style={{ color: '#a78bfa' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(139,92,246,0.12)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}>
               <Send size={18} strokeWidth={2.5} />
             </button>
           </form>
           {countdown > 0
-            ? <p className="text-[9px] text-amber-500 font-bold text-center mt-1.5">Try again in {countdown}s…</p>
-            : <p className="text-[9px] text-gray-700 text-center mt-1.5">Enter to send · Shift+Enter for new line</p>
+            ? <p className="text-[9px] font-bold text-center mt-1.5" style={{ color: '#EAB308' }}>Try again in {countdown}s…</p>
+            : <p className="text-[9px] text-center mt-1.5" style={{ color: 'rgba(255,255,255,0.2)' }}>Enter to send · Shift+Enter for new line</p>
           }
-          <p className="text-[9px] text-gray-700/60 text-center mt-1">FlickScient can make mistakes — verify important info</p>
+          <p className="text-[9px] text-center mt-1" style={{ color: 'rgba(255,255,255,0.12)' }}>FlickScient can make mistakes — verify important info</p>
         </div>
       </>}
 
