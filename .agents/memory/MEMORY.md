@@ -1,1 +1,3 @@
 - [FlickScient design system](design-system.md) — gold #EAB308, dark #0a0a0f, card #0d0d14, Cinzel serif headings via inline style only (Tailwind v4 can't set custom font families via class).
+- [Component extraction](component-extraction.md) — App.tsx shrunk to ~210 lines; pages in src/pages/, shared UI in src/components/, constants/tmdb in src/lib/constants.ts; keep hash-based view-state routing (no react-router/wouter needed).
+- [Now Watching feature](now-watching.md) — AmbientBackground (fixed, z:0, poster palette shimmer) + NowWatchingBanner; canvas color sampling for poster palette; nowWatchingId persisted to localStorage.
