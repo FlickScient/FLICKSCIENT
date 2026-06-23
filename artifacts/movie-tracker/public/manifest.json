@@ -1,24 +1,16 @@
 {
-  "name": "Movie Sync — Masterpiece Tracker",
-  "short_name": "Movie Sync",
-  "description": "Track every film and series you watch. Created by Mahmudul Hasan Mahid.",
+  "name": "MovieSync",
+  "short_name": "MovieSync",
+  "description": "The Ultimate Canon. Track, discover, and sync films with AI.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#0a0a0c",
-  "theme_color": "#EAB308",
   "orientation": "portrait",
+  "background_color": "#0a0a0a",
+  "theme_color": "#d4a017",
+  "categories": ["entertainment"],
   "icons": [
-    {
-      "src": "/icon-192.svg",
-      "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon-512.svg",
-      "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }
