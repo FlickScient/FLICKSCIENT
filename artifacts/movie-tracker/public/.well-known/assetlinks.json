@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.flickscient.moviesync",
+    "sha256_cert_fingerprints": [
+      "6E:C5:19:86:04:08:B5:C4:98:63:AC:2D:DD:31:8B:3D:0F:EF:6A:8E:76:E1:16:8D:6D:FA:74:54:09:67:D8:67"
+    ]
+  }
+}]
